@@ -6,16 +6,13 @@ from typing import TYPE_CHECKING, TypeVar
 
 from ..codec.frame import HEADER_SIZE, decompress_body, parse_header
 from ..commands.setup import SETUP_COMMANDS
+from ..config import get_best_host, get_port, get_timeout
 from ..exceptions import TdxConnectionError
 
 if TYPE_CHECKING:
     from ..commands.base import BaseCommand
 
 T = TypeVar("T")
-
-_DEFAULT_HOST = "180.153.18.170"
-_DEFAULT_PORT = 7709
-_DEFAULT_TIMEOUT = 15.0
 
 
 class AsyncTdxConnection:
@@ -29,13 +26,13 @@ class AsyncTdxConnection:
 
     def __init__(
         self,
-        host: str = _DEFAULT_HOST,
-        port: int = _DEFAULT_PORT,
-        timeout: float = _DEFAULT_TIMEOUT,
+        host: str | None = None,
+        port: int | None = None,
+        timeout: float | None = None,
     ) -> None:
-        self.host = host
-        self.port = port
-        self.timeout = timeout
+        self.host = host if host is not None else get_best_host()
+        self.port = port if port is not None else get_port()
+        self.timeout = timeout if timeout is not None else get_timeout()
         self._reader: asyncio.StreamReader | None = None
         self._writer: asyncio.StreamWriter | None = None
         # 单连接不支持请求复用；所有 IO 在连接内串行执行。

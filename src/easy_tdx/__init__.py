@@ -21,9 +21,22 @@ asyncio 版本::
 """
 
 from .client import AsyncTdxClient, TdxClient
+from .config import save_best_ex_host, save_best_host
 from .ex.client import AsyncExTdxClient, ExTdxClient
+from .ex.mac_client import AsyncMacExClient, MacExClient
 from .ex.models import KNOWN_EX_HOSTS
 from .exceptions import TdxCommandError, TdxConnectionError, TdxDecodeError, TdxError
+from .mac.client import AsyncMacClient, MacClient
+from .mac.enums import (
+    Adjust,
+    BoardType,
+    Category,
+    ExMarket,
+    FilterType,
+    Period,
+    SortOrder,
+    SortType,
+)
 from .models import (
     XDXR_CATEGORY_NAMES,
     CompanyInfoCategory,
@@ -39,15 +52,30 @@ from .models import (
     TransactionRecord,
     XdxrRecord,
 )
-from .transport.sync import CALC_HOSTS, KNOWN_HOSTS, ping_all
+from .transport.sync import CALC_HOSTS, KNOWN_HOSTS, MAC_HOSTS, ping_all, ping_mac_all
+from .unified import AsyncUnifiedTdxClient, UnifiedTdxClient
 
 __all__ = [
     # 客户端
     "TdxClient",
     "AsyncTdxClient",
+    "MacClient",
+    "AsyncMacClient",
+    "MacExClient",
+    "AsyncMacExClient",
+    "UnifiedTdxClient",
+    "AsyncUnifiedTdxClient",
     # 枚举
     "Market",
     "KlineCategory",
+    "Adjust",
+    "BoardType",
+    "Category",
+    "ExMarket",
+    "FilterType",
+    "Period",
+    "SortOrder",
+    "SortType",
     # 数据模型
     "SecurityBar",
     "SecurityQuote",
@@ -71,8 +99,12 @@ __all__ = [
     "KNOWN_EX_HOSTS",
     # 工具
     "ping_all",
+    "ping_mac_all",
     "KNOWN_HOSTS",
     "CALC_HOSTS",
+    "MAC_HOSTS",
+    "save_best_host",
+    "save_best_ex_host",
 ]
 
 __version__ = "1.0.0"

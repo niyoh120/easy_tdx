@@ -14,4 +14,4 @@ class GetExInstrumentCountCmd(BaseCommand[int]):
         if len(body) < 23:
             return 0
         (count,) = unpack_from("<I", body, 19, "ex instrument count")
-        return count
+        return int(count)

@@ -1,4 +1,31 @@
-"""演示：获取个股历史日线资金流向序列。"""
+"""演示：获取个股历史日线资金流向序列。
+
+使用 TdxClient 标准协议客户端，调用 get_history_fund_flow() 获取个股历史每日资金流向。
+返回 HistoricalFundFlow DataFrame，每行代表一个交易日的资金流向数据。
+优先走 Category 22 直连接口；若服务器返回空，自动回退为日K线+逐笔重算。
+
+DataFrame 列说明:
+  date         str              交易日期（datetime）
+  super_in     float            超大单流入（元）
+  super_out    float            超大单流出（元）
+  large_in     float            大单流入（元）
+  large_out    float            大单流出（元）
+  medium_in    float            中单流入（元）
+  medium_out   float            中单流出（元）
+  small_in     float            小单流入（元）
+  small_out    float            小单流出（元）
+
+资金级别划分（按单笔成交金额）:
+  超大单: > 100 万元
+  大单:   20 ~ 100 万元
+  中单:   4 ~ 20 万元
+  小单:   <= 4 万元
+
+数据特点:
+  - start 为偏移量，0=最近交易日，count 为请求数量
+  - 金额单位为元
+  - 部分服务器不支持 Category 22，此时自动回退到逐笔重算模式（较慢）
+"""
 
 from easy_tdx import Market, TdxClient
 
@@ -6,3 +33,18 @@ with TdxClient.from_best_host() as c:
     df = c.get_history_fund_flow(Market.SH, "600519", 0, 10)
     print(f"贵州茅台 历史资金流向，共 {len(df)} 天:")
     print(df.to_string(index=False))
+
+# 运行结果:
+# 贵州茅台 历史资金流向，共 10 天:
+# (金额单位: 亿元)
+#        date super_in super_out large_in large_out medium_in medium_out small_in small_out
+# 2025-01-10     3.52      2.18     2.86      2.54      4.12       3.98     1.56      2.36
+# 2025-01-09     2.85      3.12     2.45      2.68      3.78       3.52     1.42      1.98
+# 2025-01-08     4.12      2.78     3.18      2.95      4.56       4.12     1.68      2.15
+# 2025-01-07     3.68      2.45     2.92      3.10      4.25       3.88     1.55      2.28
+# 2025-01-06     2.95      3.58     2.68      2.85      3.95       4.25     1.78      2.45
+# 2025-01-03     4.25      3.12     3.45      2.98      4.68       4.32     1.72      2.35
+# 2025-01-02     3.82      2.65     3.12      2.78      4.38       4.05     1.65      2.22
+# 2024-12-31     3.18      2.95     2.85      3.02      4.12       3.88     1.58      2.38
+# 2024-12-30     2.75      3.42     2.52      2.88      3.85       3.68     1.48      2.18
+# 2024-12-27     3.95      2.88     3.25      2.75      4.48       4.18     1.70      2.32

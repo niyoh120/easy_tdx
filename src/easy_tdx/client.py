@@ -3,12 +3,13 @@
 import asyncio
 import json
 import logging
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 from types import TracebackType
-from typing import TypeVar
+from typing import Any, TypeVar
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -31,6 +32,7 @@ from .commands.security_list import GetSecurityListCmd
 from .commands.security_quotes import GetSecurityQuotesCmd
 from .commands.transaction import GetHistoryTransactionDataCmd, GetTransactionDataCmd
 from .commands.xdxr_info import GetXdxrInfoCmd
+from .config import get_best_host, get_calc_hosts, get_known_hosts, get_port, get_timeout, save_best_host
 from .exceptions import TdxConnectionError
 from .models.bar import SecurityBar
 from .models.enums import KlineCategory, Market
@@ -42,9 +44,9 @@ from .models.security import SecurityInfo
 from .models.stats import FundFlow, HistoricalFundFlow, MarketStat
 from .models.timeseries import TransactionRecord
 from .transport.async_ import AsyncTdxConnection
-from .transport.sync import CALC_HOSTS, KNOWN_HOSTS, TdxConnection, ping_all
+from .transport.sync import TdxConnection, ping_all
 
-_DEFAULT_PORT = 7709
+_RETRY_DELAYS = (0.1, 0.5, 1.0, 2.0)
 _T = TypeVar("_T")
 _SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
 _DAILY_PLUS = frozenset(
@@ -145,11 +147,11 @@ _CACHE_DIR = Path.home() / ".easy_tdx" / "cache"
 _CACHE_MAX_AGE = 86400  # 1 天
 
 
-def _serialize_stocks(stocks: list[SecurityInfo]) -> list[dict]:
+def _serialize_stocks(stocks: list[SecurityInfo]) -> list[dict[str, Any]]:
     return [{k: v for k, v in asdict(s).items() if k != "_raw"} for s in stocks]
 
 
-def _deserialize_stocks(data: list[dict]) -> list[SecurityInfo]:
+def _deserialize_stocks(data: list[dict[str, Any]]) -> list[SecurityInfo]:
     return [SecurityInfo(**{**d, "market": Market(d["market"])}) for d in data]
 
 
@@ -195,15 +197,17 @@ class TdxClient:
 
     def __init__(
         self,
-        host: str = KNOWN_HOSTS[0],
-        port: int = _DEFAULT_PORT,
-        timeout: float = 15.0,
+        host: str | None = None,
+        port: int | None = None,
+        timeout: float | None = None,
         auto_reconnect: bool = True,
+        heartbeat_interval: float = 15.0,
     ) -> None:
-        self._host = host
-        self._port = port
-        self._timeout = timeout
+        self._host = host if host is not None else get_best_host()
+        self._port = port if port is not None else get_port()
+        self._timeout = timeout if timeout is not None else get_timeout()
         self._auto_reconnect = auto_reconnect
+        self._heartbeat_interval = heartbeat_interval
         self._conn = TdxConnection(host, port, timeout)
 
     # ------------------------------------------------------------------ #
@@ -213,27 +217,40 @@ class TdxClient:
     @classmethod
     def from_best_host(
         cls,
-        hosts: list[str] = KNOWN_HOSTS,
-        port: int = _DEFAULT_PORT,
-        timeout: float = 15.0,
+        hosts: list[str] | None = None,
+        port: int | None = None,
+        timeout: float | None = None,
         ping_timeout: float = 5.0,
         auto_reconnect: bool = True,
+        heartbeat_interval: float = 15.0,
     ) -> "TdxClient":
         """测量 hosts 中所有服务器延迟，选最低延迟的建立连接。
 
+        自动将最佳主机保存到 config.json，后续连接默认使用该主机。
         若所有服务器均不可达，回退到 hosts[0]。
         """
+        if hosts is None:
+            hosts = get_known_hosts()
+        if port is None:
+            port = get_port()
+        if timeout is None:
+            timeout = get_timeout()
         ranked = ping_all(hosts, port, ping_timeout)
         best = ranked[0][0] if ranked else hosts[0]
-        return cls(best, port, timeout, auto_reconnect)
+        save_best_host(best)
+        return cls(best, port, timeout, auto_reconnect, heartbeat_interval)
 
     @staticmethod
     def ping_all(
-        hosts: list[str] = KNOWN_HOSTS,
-        port: int = _DEFAULT_PORT,
+        hosts: list[str] | None = None,
+        port: int | None = None,
         timeout: float = 5.0,
     ) -> list[tuple[str, float]]:
         """测量多台服务器延迟，返回按延迟排序的 (host, seconds) 列表。"""
+        if hosts is None:
+            hosts = get_known_hosts()
+        if port is None:
+            port = get_port()
         return ping_all(hosts, port, timeout)
 
     # ------------------------------------------------------------------ #
@@ -242,9 +259,28 @@ class TdxClient:
 
     def connect(self) -> None:
         self._conn.connect()
+        if self._heartbeat_interval > 0:
+            self._conn.start_heartbeat(self._heartbeat_interval)
 
     def close(self) -> None:
+        self._conn.stop_heartbeat()
         self._conn.close()
+
+    def disconnect(self) -> None:
+        """Alias for close()."""
+        self.close()
+
+    def ensure_connected(self) -> None:
+        """验证连接存活，断线则自动重建。"""
+        try:
+            self._execute(GetSecurityCountCmd(Market.SH))
+        except TdxConnectionError:
+            self._conn.stop_heartbeat()
+            self._conn.close()
+            self._conn = TdxConnection(self._host, self._port, self._timeout)
+            self._conn.connect()
+            if self._heartbeat_interval > 0:
+                self._conn.start_heartbeat(self._heartbeat_interval)
 
     def __enter__(self) -> "TdxClient":
         self.connect()
@@ -263,17 +299,25 @@ class TdxClient:
     # ------------------------------------------------------------------ #
 
     def _execute(self, cmd: "BaseCommand[_T]") -> _T:
-        """执行命令；断线时尝试重连一次再重试（若 auto_reconnect=True）。"""
+        """执行命令；断线时指数退避重试。"""
         try:
             return self._conn.execute(cmd)
         except TdxConnectionError:
             if not self._auto_reconnect:
                 raise
-            # 重连后重试一次
-            self._conn.close()
-            self._conn = TdxConnection(self._host, self._port, self._timeout)
-            self._conn.connect()
-            return self._conn.execute(cmd)
+            last_exc: TdxConnectionError | None = None
+            for delay in _RETRY_DELAYS:
+                time.sleep(delay)
+                self._conn.close()
+                self._conn = TdxConnection(self._host, self._port, self._timeout)
+                self._conn.connect()
+                if self._heartbeat_interval > 0:
+                    self._conn.start_heartbeat(self._heartbeat_interval)
+                try:
+                    return self._conn.execute(cmd)
+                except TdxConnectionError as e:
+                    last_exc = e
+            raise last_exc  # type: ignore[misc]
 
     # ------------------------------------------------------------------ #
     # 市场信息
@@ -525,29 +569,35 @@ class TdxClient:
         finally:
             conn.close()
 
-    def get_financial_file_list(self, host: str = CALC_HOSTS[0]) -> pd.DataFrame:
+    def get_financial_file_list(self, host: str | None = None) -> pd.DataFrame:
         """获取可用的历史专业财报文件列表。
 
         连接到计算服务器，下载 tdxfin/gpcw.txt 并解析。
         """
+        if host is None:
+            host = get_calc_hosts()[0]
         data = self._download_from_host(host, "tdxfin/gpcw.txt")
         raw_list = parse_financial_file_list(data)
         return _to_df([FinancialFileInfo(filename=f, hash=h, filesize=s) for f, h, s in raw_list])
 
-    def get_financial_file(self, filename: str, host: str = CALC_HOSTS[0]) -> bytes:
+    def get_financial_file(self, filename: str, host: str | None = None) -> bytes:
         """从计算服务器下载财报 zip 文件。
 
         Args:
             filename: 如 'tdxfin/gpcw20260331.zip'
         """
+        if host is None:
+            host = get_calc_hosts()[0]
         return self._download_from_host(host, filename)
 
-    def get_financial_records(self, filename: str, host: str = CALC_HOSTS[0]) -> pd.DataFrame:
+    def get_financial_records(self, filename: str, host: str | None = None) -> pd.DataFrame:
         """下载财报 zip 并解析为每只股票的记录列表。
 
         Args:
             filename: 如 'tdxfin/gpcw20260331.zip'
         """
+        if host is None:
+            host = get_calc_hosts()[0]
         import io
         import re
         import zipfile
@@ -568,7 +618,7 @@ class TdxClient:
         raw_records = parse_financial_dat(dat_data, report_date)
         records: list[FinancialRecord] = []
         for code, market_byte, rdate, fields in raw_records:
-            market = Market.SH if market_byte == b"\x01" else Market.SZ
+            market = Market.SH if market_byte == 1 else Market.SZ
             records.append(
                 FinancialRecord(code=code, market=market, report_date=rdate, fields=fields)
             )
@@ -713,43 +763,57 @@ class AsyncTdxClient:
 
     def __init__(
         self,
-        host: str = KNOWN_HOSTS[0],
-        port: int = _DEFAULT_PORT,
-        timeout: float = 15.0,
+        host: str | None = None,
+        port: int | None = None,
+        timeout: float | None = None,
         auto_reconnect: bool = True,
         heartbeat_interval: float = 60.0,
     ) -> None:
-        self._host = host
-        self._port = port
-        self._timeout = timeout
+        self._host = host if host is not None else get_best_host()
+        self._port = port if port is not None else get_port()
+        self._timeout = timeout if timeout is not None else get_timeout()
         self._auto_reconnect = auto_reconnect
         self._heartbeat_interval = heartbeat_interval
-        self._conn = AsyncTdxConnection(host, port, timeout)
+        self._conn = AsyncTdxConnection(self._host, self._port, self._timeout)
         self._execute_lock = asyncio.Lock()
         self._heartbeat_task: asyncio.Task[None] | None = None
 
     @classmethod
     def from_best_host(
         cls,
-        hosts: list[str] = KNOWN_HOSTS,
-        port: int = _DEFAULT_PORT,
-        timeout: float = 15.0,
+        hosts: list[str] | None = None,
+        port: int | None = None,
+        timeout: float | None = None,
         ping_timeout: float = 5.0,
         auto_reconnect: bool = True,
         heartbeat_interval: float = 60.0,
     ) -> "AsyncTdxClient":
-        """测量 hosts 中所有服务器延迟，选最低延迟的建立连接。"""
+        """测量 hosts 中所有服务器延迟，选最低延迟的建立连接。
+
+        自动将最佳主机保存到 config.json。
+        """
+        if hosts is None:
+            hosts = get_known_hosts()
+        if port is None:
+            port = get_port()
+        if timeout is None:
+            timeout = get_timeout()
         ranked = ping_all(hosts, port, ping_timeout)
         best = ranked[0][0] if ranked else hosts[0]
+        save_best_host(best)
         return cls(best, port, timeout, auto_reconnect, heartbeat_interval)
 
     @staticmethod
     def ping_all(
-        hosts: list[str] = KNOWN_HOSTS,
-        port: int = _DEFAULT_PORT,
+        hosts: list[str] | None = None,
+        port: int | None = None,
         timeout: float = 5.0,
     ) -> list[tuple[str, float]]:
         """测量多台服务器延迟，返回按延迟排序的 (host, seconds) 列表。"""
+        if hosts is None:
+            hosts = get_known_hosts()
+        if port is None:
+            port = get_port()
         return ping_all(hosts, port, timeout)
 
     async def connect(self) -> None:
@@ -805,17 +869,24 @@ class AsyncTdxClient:
                 pass
 
     async def _execute(self, cmd: "BaseCommand[_T]") -> _T:
-        """执行命令；断线时尝试重连一次再重试（若 auto_reconnect=True）。"""
+        """执行命令；断线时指数退避重试。"""
         async with self._execute_lock:
             try:
                 return await self._conn.execute(cmd)
             except TdxConnectionError:
                 if not self._auto_reconnect:
                     raise
-                await self._conn.close()
-                self._conn = AsyncTdxConnection(self._host, self._port, self._timeout)
-                await self._conn.connect()
-                return await self._conn.execute(cmd)
+                last_exc: TdxConnectionError | None = None
+                for delay in _RETRY_DELAYS:
+                    await asyncio.sleep(delay)
+                    await self._conn.close()
+                    self._conn = AsyncTdxConnection(self._host, self._port, self._timeout)
+                    await self._conn.connect()
+                    try:
+                        return await self._conn.execute(cmd)
+                    except TdxConnectionError as e:
+                        last_exc = e
+                raise last_exc  # type: ignore[misc]
 
     async def get_security_count(self, market: Market) -> int:
         return await self._execute(GetSecurityCountCmd(market))
@@ -1025,18 +1096,24 @@ class AsyncTdxClient:
         finally:
             await conn.close()
 
-    async def get_financial_file_list(self, host: str = CALC_HOSTS[0]) -> pd.DataFrame:
+    async def get_financial_file_list(self, host: str | None = None) -> pd.DataFrame:
         """获取可用的历史专业财报文件列表（异步）。"""
+        if host is None:
+            host = get_calc_hosts()[0]
         data = await self._async_download_from_host(host, "tdxfin/gpcw.txt")
         raw_list = parse_financial_file_list(data)
         return _to_df([FinancialFileInfo(filename=f, hash=h, filesize=s) for f, h, s in raw_list])
 
-    async def get_financial_file(self, filename: str, host: str = CALC_HOSTS[0]) -> bytes:
+    async def get_financial_file(self, filename: str, host: str | None = None) -> bytes:
         """从计算服务器下载财报 zip 文件（异步）。"""
+        if host is None:
+            host = get_calc_hosts()[0]
         return await self._async_download_from_host(host, filename)
 
-    async def get_financial_records(self, filename: str, host: str = CALC_HOSTS[0]) -> pd.DataFrame:
+    async def get_financial_records(self, filename: str, host: str | None = None) -> pd.DataFrame:
         """下载财报 zip 并解析为记录列表（异步）。"""
+        if host is None:
+            host = get_calc_hosts()[0]
         import io
         import re
         import zipfile
@@ -1057,7 +1134,7 @@ class AsyncTdxClient:
         raw_records = parse_financial_dat(dat_data, report_date)
         records: list[FinancialRecord] = []
         for code, market_byte, rdate, fields in raw_records:
-            market = Market.SH if market_byte == b"\x01" else Market.SZ
+            market = Market.SH if market_byte == 1 else Market.SZ
             records.append(
                 FinancialRecord(code=code, market=market, report_date=rdate, fields=fields)
             )

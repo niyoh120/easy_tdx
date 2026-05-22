@@ -2,34 +2,10 @@
 
 from dataclasses import dataclass, field
 
-# 扩展行情服务器（端口 7727），来源: pytdx_backup/util/best_ip.py
-KNOWN_EX_HOSTS: list[str] = [
-    "106.14.95.149",
-    "112.74.214.43",
-    "119.147.86.171",
-    "119.97.185.5",
-    "120.24.0.77",
-    "47.92.127.181",
-    "59.175.238.38",
-    "61.152.107.141",
-    "61.152.107.171",
-    "47.107.75.159",
-    "120.25.218.6",
-    "43.139.173.246",
-    "159.75.90.107",
-    "106.52.170.195",
-    "139.9.191.175",
-    "175.24.47.69",
-    "150.158.9.199",
-    "150.158.20.127",
-    "49.235.119.116",
-    "49.234.13.160",
-    "116.205.143.214",
-    "124.71.223.19",
-    "113.45.175.47",
-    "123.60.173.210",
-    "118.89.69.202",
-]
+from ..config import get_ex_hosts, get_mac_ex_hosts
+
+# 模块级别名，供外部 `from easy_tdx.ex.models import KNOWN_EX_HOSTS` 使用。
+KNOWN_EX_HOSTS = get_ex_hosts()
 
 # 已知扩展行情市场代码
 KNOWN_EX_MARKETS: dict[int, str] = {
@@ -45,6 +21,9 @@ KNOWN_EX_MARKETS: dict[int, str] = {
     71: "沪港通",
     74: "外盘",
 }
+
+# MAC 协议扩展行情服务器（端口 7727）
+MAC_EX_HOSTS: list[str] = get_mac_ex_hosts()
 
 _DEFAULT_EX_PORT = 7727
 

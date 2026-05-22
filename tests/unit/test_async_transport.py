@@ -119,7 +119,7 @@ def test_async_client_request_timeout() -> None:
         server = await asyncio.start_server(handle, "127.0.0.1", 0)
         port = server.sockets[0].getsockname()[1]
         try:
-            client = AsyncTdxClient("127.0.0.1", port=port, timeout=0.05)
+            client = AsyncTdxClient("127.0.0.1", port=port, timeout=0.05, auto_reconnect=False)
             await client.connect()
             t0 = time.monotonic()
             try:
