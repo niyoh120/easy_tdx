@@ -12,7 +12,7 @@
 # V3.1  2021-12-19 新增 TOPRANGE,LOWRANGE一级函数 
 # V3.2  2023-04-04 新增 CR指标
 # V3.3  2023-11-09 新增 SIN,COS,TAN序列处理的三角函数
-  
+# V4.0  2026-06-02 handsomejustin 新增 ZHUOYAO,BIAS_SIGNAL两个自创函数  
 
 #以下所有函数如无特别说明，输入参数S均为numpy序列或者列表list，N为整型int 
 #应用层1级函数完美兼容通达信或同花顺，具体使用方法请参考通达信 
