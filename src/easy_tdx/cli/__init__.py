@@ -8,6 +8,7 @@ from .cmd_admin import ping, version
 from .cmd_auction import auction
 from .cmd_board import belong_board, board_list, board_members, board_ranking, board_summary
 from .cmd_capital import capital_flow
+from .cmd_chanlun import chanlun
 from .cmd_ex import ex
 from .cmd_finance import f10, fund_flow
 from .cmd_indicator import indicator, indicator_list
@@ -21,7 +22,7 @@ from .cmd_transaction import transaction
 
 
 @click.group()
-@click.version_option(version="1.5.0", prog_name="easy-tdx")
+@click.version_option(version="1.7.0", prog_name="easy-tdx")
 def cli() -> None:
     """easy-tdx -- 通达信行情数据 CLI（默认 JSON 输出，适合 Agent 使用）。
 
@@ -64,3 +65,4 @@ cli.add_command(ex)
 cli.add_command(indicator)
 cli.add_command(indicator_list)
 cli.add_command(offline)
+cli.add_command(chanlun)
