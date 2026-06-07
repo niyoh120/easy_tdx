@@ -3,7 +3,17 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/easy-tdx.svg)](https://pypi.org/project/easy-tdx/)
 
-通达信 TCP 行情协议客户端。支持 A 股、港股、美股、期货全市场；内置 `easy-tdx` CLI 工具，默认 JSON 输出，天然适配 Claude Code、OpenClaw、Hermes 等 AI Agent 工具链。提供同步 + asyncio 双接口；支持离线数据读取与写入同步；strict mypy 通过；每一层编解码都有离线 fixture 测试覆盖。
+量化机构花钱买的毫秒级行情通道，散户连一根日线都要手动截图。
+
+这个项目想打破这件事。
+
+easy-tdx 是一个完全免费、无需注册、无需 API Key 的开源行情数据工具。一行命令拿到 A 股、港股、美股、期货的 K 线、报价、资金流向、板块数据。32 个技术指标开箱即用，缠论分析（笔、中枢、买卖点、背驰）内置计算。装上就能跑，Python 代码和命令行双通道，输出的 JSON 天然喂给 AI Agent——Claude Code、OpenClaw、Hermes 直接用。
+
+不需要你会写量化框架，不需要你懂 TCP 协议，不需要你给任何平台付一分钱。`pip install easy-tdx`，30 秒后你手里的数据和机构看到的是同一份。
+
+做这个项目的出发点很简单：金融数据的获取门槛不该是散户亏钱的原因。当量化基金用程序化交易收割市场的时候，普通人至少应该有权利用同样的数据做自己的判断。这不是一个帮你赚钱的工具，这是一个让你不再裸奔的工具。
+
+MIT 协议，代码全开源，随便用，随便改，随便分发。
 
 ## 安装
 
