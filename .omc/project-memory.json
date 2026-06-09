@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1779337271902,
-  "projectRoot": "D:\\python\\xmtdx",
+  "lastScanned": 1780948623576,
+  "projectRoot": "D:\\python\\easy_tdx",
   "techStack": {
     "languages": [
       {
@@ -25,7 +25,7 @@
   },
   "build": {
     "buildCommand": null,
-    "testCommand": "python -m ruff check src/ tests/ 2>&1 && python -m pytest tests/unit/ -q 2>&1",
+    "testCommand": "python -m pytest tests/unit/ -q --tb=line 2>&1 | tail -5",
     "lintCommand": "ruff check",
     "devCommand": null,
     "scripts": {}
@@ -40,6 +40,8 @@
     "isMonorepo": false,
     "workspaces": [],
     "mainDirectories": [
+      "docs",
+      "examples",
       "scripts",
       "src",
       "tests"
@@ -51,13 +53,44 @@
   },
   "customNotes": [],
   "directoryMap": {
+    "dist": {
+      "path": "dist",
+      "purpose": "Distribution/build output",
+      "fileCount": 2,
+      "lastAccessed": 1780948623545,
+      "keyFiles": [
+        "easy_tdx-1.0.0-py3-none-any.whl",
+        "easy_tdx-1.0.0.tar.gz"
+      ]
+    },
+    "docs": {
+      "path": "docs",
+      "purpose": "Documentation",
+      "fileCount": 8,
+      "lastAccessed": 1780948623545,
+      "keyFiles": [
+        "api_reference.md",
+        "conf.py",
+        "field_mapping.md",
+        "index.md",
+        "indicator-bias-signal.md"
+      ]
+    },
+    "examples": {
+      "path": "examples",
+      "purpose": "Example code",
+      "fileCount": 0,
+      "lastAccessed": 1780948623546,
+      "keyFiles": []
+    },
     "scripts": {
       "path": "scripts",
       "purpose": "Build/utility scripts",
-      "fileCount": 3,
-      "lastAccessed": 1779337271876,
+      "fileCount": 4,
+      "lastAccessed": 1780948623547,
       "keyFiles": [
         "probe_unknowns.py",
+        "ruff_hook.py",
         "verify_fixes_20260415.py",
         "__init__.py"
       ]
@@ -66,329 +99,182 @@
       "path": "src",
       "purpose": "Source code",
       "fileCount": 0,
-      "lastAccessed": 1779337271876,
+      "lastAccessed": 1780948623548,
       "keyFiles": []
     },
     "tests": {
       "path": "tests",
       "purpose": "Test files",
       "fileCount": 1,
-      "lastAccessed": 1779337271877,
+      "lastAccessed": 1780948623549,
       "keyFiles": [
         "__init__.py"
+      ]
+    },
+    "venv": {
+      "path": "venv",
+      "purpose": null,
+      "fileCount": 2,
+      "lastAccessed": 1780948623550,
+      "keyFiles": [
+        "pyvenv.cfg"
       ]
     },
     "tests\\fixtures": {
       "path": "tests\\fixtures",
       "purpose": "Test fixtures",
       "fileCount": 24,
-      "lastAccessed": 1779337271879,
+      "lastAccessed": 1780948623554,
       "keyFiles": [
         "company_info_category.hex",
         "company_info_category.json",
         "company_info_content.hex"
       ]
+    },
+    "venv\\Lib": {
+      "path": "venv\\Lib",
+      "purpose": "Library code",
+      "fileCount": 0,
+      "lastAccessed": 1780948623555,
+      "keyFiles": []
+    },
+    "venv\\Scripts": {
+      "path": "venv\\Scripts",
+      "purpose": "Build/utility scripts",
+      "fileCount": 25,
+      "lastAccessed": 1780948623555,
+      "keyFiles": [
+        "activate",
+        "activate.bat",
+        "activate.fish"
+      ]
     }
   },
   "hotPaths": [
     {
-      "path": "src\\easy_tdx\\client.py",
-      "accessCount": 116,
-      "lastAccessed": 1779392745160,
+      "path": "src\\easy_tdx\\backtest\\cli.py",
+      "accessCount": 14,
+      "lastAccessed": 1781024440572,
+      "type": "file"
+    },
+    {
+      "path": "run_all_strategies.py",
+      "accessCount": 13,
+      "lastAccessed": 1781024439395,
+      "type": "file"
+    },
+    {
+      "path": "src\\easy_tdx\\MyTT.py",
+      "accessCount": 9,
+      "lastAccessed": 1781025723850,
       "type": "file"
     },
     {
       "path": "README.md",
-      "accessCount": 16,
-      "lastAccessed": 1779394894399,
-      "type": "file"
-    },
-    {
-      "path": "src\\easy_tdx\\_df.py",
-      "accessCount": 12,
-      "lastAccessed": 1779391749202,
-      "type": "file"
-    },
-    {
-      "path": "tests\\unit\\test_a_share_extensions.py",
-      "accessCount": 9,
-      "lastAccessed": 1779392575071,
-      "type": "file"
-    },
-    {
-      "path": "tests\\unit\\test_block_info.py",
-      "accessCount": 6,
-      "lastAccessed": 1779387538331,
-      "type": "file"
-    },
-    {
-      "path": "examples\\05_transaction\\transaction_data.py",
-      "accessCount": 6,
-      "lastAccessed": 1779390229059,
-      "type": "file"
-    },
-    {
-      "path": "examples\\05_transaction\\history_transaction.py",
-      "accessCount": 6,
-      "lastAccessed": 1779390229831,
-      "type": "file"
-    },
-    {
-      "path": "src\\easy_tdx\\models\\timeseries.py",
-      "accessCount": 6,
-      "lastAccessed": 1779391466426,
-      "type": "file"
-    },
-    {
-      "path": "examples\\04_minute\\minute_time_data.py",
       "accessCount": 4,
-      "lastAccessed": 1779392745091,
+      "lastAccessed": 1781026610801,
+      "type": "file"
+    },
+    {
+      "path": "src\\easy_tdx\\backtest\\combo.py",
+      "accessCount": 3,
+      "lastAccessed": 1781023715594,
+      "type": "file"
+    },
+    {
+      "path": "src\\easy_tdx\\backtest\\__init__.py",
+      "accessCount": 3,
+      "lastAccessed": 1781023799015,
+      "type": "file"
+    },
+    {
+      "path": "tests\\unit\\test_backtest_combo.py",
+      "accessCount": 2,
+      "lastAccessed": 1781023758085,
+      "type": "file"
+    },
+    {
+      "path": "src\\easy_tdx\\backtest\\strategy.py",
+      "accessCount": 1,
+      "lastAccessed": 1781021955703,
+      "type": "file"
+    },
+    {
+      "path": "src\\easy_tdx\\backtest\\engine.py",
+      "accessCount": 1,
+      "lastAccessed": 1781021956588,
+      "type": "file"
+    },
+    {
+      "path": "src\\easy_tdx\\backtest\\types.py",
+      "accessCount": 1,
+      "lastAccessed": 1781021957067,
+      "type": "file"
+    },
+    {
+      "path": "src\\easy_tdx\\backtest\\dsl.py",
+      "accessCount": 1,
+      "lastAccessed": 1781021962044,
+      "type": "file"
+    },
+    {
+      "path": "strategies\\ma_cross.py",
+      "accessCount": 1,
+      "lastAccessed": 1781021963164,
+      "type": "file"
+    },
+    {
+      "path": "strategies\\macd_cross.py",
+      "accessCount": 1,
+      "lastAccessed": 1781021963925,
+      "type": "file"
+    },
+    {
+      "path": "strategies\\rsi_reversal.py",
+      "accessCount": 1,
+      "lastAccessed": 1781021964466,
+      "type": "file"
+    },
+    {
+      "path": "strategies\\bollinger_breakout.py",
+      "accessCount": 1,
+      "lastAccessed": 1781021964950,
+      "type": "file"
+    },
+    {
+      "path": "src\\easy_tdx\\backtest\\performance.py",
+      "accessCount": 1,
+      "lastAccessed": 1781021974264,
+      "type": "file"
+    },
+    {
+      "path": "strategies\\turtle_breakout.py",
+      "accessCount": 1,
+      "lastAccessed": 1781021982151,
+      "type": "file"
+    },
+    {
+      "path": "C:\\Users\\毛利哥\\.claude\\plans\\2-3-deep-melody.md",
+      "accessCount": 1,
+      "lastAccessed": 1781022126312,
+      "type": "file"
+    },
+    {
+      "path": "tests\\unit\\test_backtest_strategy.py",
+      "accessCount": 1,
+      "lastAccessed": 1781023334642,
+      "type": "file"
+    },
+    {
+      "path": "tests\\unit\\test_backtest_engine.py",
+      "accessCount": 1,
+      "lastAccessed": 1781023335435,
       "type": "file"
     },
     {
       "path": "pyproject.toml",
-      "accessCount": 4,
-      "lastAccessed": 1779394669812,
-      "type": "file"
-    },
-    {
-      "path": "src",
-      "accessCount": 4,
-      "lastAccessed": 1779394669916,
-      "type": "directory"
-    },
-    {
-      "path": "scripts\\ruff_hook.py",
-      "accessCount": 3,
-      "lastAccessed": 1779337842663,
-      "type": "file"
-    },
-    {
-      "path": "src\\xmtdx\\transport\\sync.py",
-      "accessCount": 3,
-      "lastAccessed": 1779338445930,
-      "type": "file"
-    },
-    {
-      "path": "CLAUDE.md",
-      "accessCount": 3,
-      "lastAccessed": 1779386454500,
-      "type": "file"
-    },
-    {
-      "path": "src/easy_tdx/client.py",
-      "accessCount": 3,
-      "lastAccessed": 1779387035554,
-      "type": "directory"
-    },
-    {
-      "path": "examples\\03_kline\\security_bars.py",
-      "accessCount": 3,
-      "lastAccessed": 1779389362430,
-      "type": "file"
-    },
-    {
-      "path": "examples\\03_kline\\index_bars.py",
-      "accessCount": 3,
-      "lastAccessed": 1779389362522,
-      "type": "file"
-    },
-    {
-      "path": "examples\\06_finance\\xdxr_info.py",
-      "accessCount": 3,
-      "lastAccessed": 1779389518814,
-      "type": "file"
-    },
-    {
-      "path": "examples\\08_fund_flow\\history_fund_flow.py",
-      "accessCount": 3,
-      "lastAccessed": 1779389518888,
-      "type": "file"
-    },
-    {
-      "path": "examples\\02_market_info\\security_quotes.py",
-      "accessCount": 2,
-      "lastAccessed": 1779386629339,
-      "type": "file"
-    },
-    {
-      "path": "examples\\02_market_info\\security_list.py",
-      "accessCount": 2,
-      "lastAccessed": 1779386630075,
-      "type": "file"
-    },
-    {
-      "path": "examples\\02_market_info\\security_list_all.py",
-      "accessCount": 2,
-      "lastAccessed": 1779386630813,
-      "type": "file"
-    },
-    {
-      "path": "examples\\02_market_info\\market_stat.py",
-      "accessCount": 2,
-      "lastAccessed": 1779386631522,
-      "type": "file"
-    },
-    {
-      "path": "examples\\04_minute\\history_minute_data.py",
-      "accessCount": 2,
-      "lastAccessed": 1779386654282,
-      "type": "file"
-    },
-    {
-      "path": "examples\\06_finance\\finance_info.py",
-      "accessCount": 2,
-      "lastAccessed": 1779386691184,
-      "type": "file"
-    },
-    {
-      "path": "examples\\06_finance\\price_limits.py",
-      "accessCount": 2,
-      "lastAccessed": 1779386691927,
-      "type": "file"
-    },
-    {
-      "path": "examples\\06_finance\\company_info.py",
-      "accessCount": 2,
-      "lastAccessed": 1779386692682,
-      "type": "file"
-    },
-    {
-      "path": "examples\\07_block\\block_info.py",
-      "accessCount": 2,
-      "lastAccessed": 1779386693419,
-      "type": "file"
-    },
-    {
-      "path": "examples\\08_fund_flow\\fund_flow.py",
-      "accessCount": 2,
-      "lastAccessed": 1779386694151,
-      "type": "file"
-    },
-    {
-      "path": "examples\\01_connection\\async_connect.py",
-      "accessCount": 2,
-      "lastAccessed": 1779386740298,
-      "type": "file"
-    },
-    {
-      "path": "examples\\09_file_download\\report_file.py",
-      "accessCount": 2,
-      "lastAccessed": 1779386827437,
-      "type": "file"
-    },
-    {
-      "path": "examples\\10_offline\\block_data.py",
-      "accessCount": 2,
-      "lastAccessed": 1779386828134,
-      "type": "file"
-    },
-    {
-      "path": "examples/10_offline",
-      "accessCount": 2,
-      "lastAccessed": 1779386853771,
-      "type": "directory"
-    },
-    {
-      "path": "src\\easy_tdx\\models\\bar.py",
-      "accessCount": 2,
-      "lastAccessed": 1779389275981,
-      "type": "file"
-    },
-    {
-      "path": "src\\easy_tdx\\models\\stats.py",
-      "accessCount": 2,
-      "lastAccessed": 1779389276114,
-      "type": "file"
-    },
-    {
-      "path": "src\\easy_tdx\\models\\finance.py",
-      "accessCount": 2,
-      "lastAccessed": 1779389276205,
-      "type": "file"
-    },
-    {
-      "path": "examples",
-      "accessCount": 2,
-      "lastAccessed": 1779389346769,
-      "type": "directory"
-    },
-    {
-      "path": "src\\xmtdx\\__init__.py",
       "accessCount": 1,
-      "lastAccessed": 1779337399287,
-      "type": "file"
-    },
-    {
-      "path": "src\\xmtdx\\client.py",
-      "accessCount": 1,
-      "lastAccessed": 1779337400354,
-      "type": "file"
-    },
-    {
-      "path": "src\\xmtdx\\models\\enums.py",
-      "accessCount": 1,
-      "lastAccessed": 1779337406304,
-      "type": "file"
-    },
-    {
-      "path": ".claude\\skills\\verify\\SKILL.md",
-      "accessCount": 1,
-      "lastAccessed": 1779337597439,
-      "type": "file"
-    },
-    {
-      "path": ".claude\\settings.json",
-      "accessCount": 1,
-      "lastAccessed": 1779337793420,
-      "type": "file"
-    },
-    {
-      "path": "C:\\new_jyplug\\connect.cfg",
-      "accessCount": 1,
-      "lastAccessed": 1779338269266,
-      "type": "file"
-    },
-    {
-      "path": "src\\xmtdx\\transport\\async_.py",
-      "accessCount": 1,
-      "lastAccessed": 1779338280552,
-      "type": "file"
-    },
-    {
-      "path": "src\\easy_tdx\\models\\__init__.py",
-      "accessCount": 1,
-      "lastAccessed": 1779384829108,
-      "type": "file"
-    },
-    {
-      "path": "src\\easy_tdx\\models\\security.py",
-      "accessCount": 1,
-      "lastAccessed": 1779384845552,
-      "type": "file"
-    },
-    {
-      "path": "src\\easy_tdx\\models\\quote.py",
-      "accessCount": 1,
-      "lastAccessed": 1779384845648,
-      "type": "file"
-    },
-    {
-      "path": "examples\\02_market_info\\security_count.py",
-      "accessCount": 1,
-      "lastAccessed": 1779386494822,
-      "type": "file"
-    },
-    {
-      "path": "examples\\01_connection\\ping_servers.py",
-      "accessCount": 1,
-      "lastAccessed": 1779386715403,
-      "type": "file"
-    },
-    {
-      "path": "examples\\01_connection\\connect_best_host.py",
-      "accessCount": 1,
-      "lastAccessed": 1779386715553,
+      "lastAccessed": 1781026550566,
       "type": "file"
     }
   ],

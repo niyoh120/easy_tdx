@@ -1,7 +1,0 @@
-{
-  "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"if exist \\\"D:\\\\python\\\\easty_tdx\\\\src\\\\xmtdx\\\" (echo \\\"src\\\\xmtdx EXISTS\\\" && dir \\\"D:\\\\python\\\\easty_tdx\\\\src\\\\xmtdx\\\") else (echo \\\"src\\\\xmtdx does NOT exist\\\")\"}",
-  "error": "Exit code 2\n/usr/bin/bash: eval: line 1: syntax error near unexpected token `('\n/usr/bin/bash: eval: line 1: `if exist \"D:\\python\\easty_tdx\\src\\xmtdx\" (echo \"src\\xmtdx EXISTS\" && dir \"D:\\python\\easty_tdx\\src\\xmtdx\") else (echo \"src\\xmtdx does NOT exist\")'",
-  "timestamp": "2026-05-21T20:17:49.142Z",
-  "retry_count": 1
-}

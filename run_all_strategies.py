@@ -59,6 +59,97 @@ def _map_trade_values(trades_df: Any, equity: Any, initial_cash: float) -> list[
     return result_vals
 
 
+def _run_combo_screen(
+    strategy_files: list[Path],
+    df: Any,
+    cash: float,
+    commission: float,
+    combo_sizes: tuple[int, ...],
+    combo_mode: str,
+) -> None:
+    """运行多因子组合回测并输出排名。"""
+    import importlib.util
+
+    from easy_tdx.backtest.combo import CombinationRunner
+    from easy_tdx.backtest.strategy import Strategy
+
+    # 加载所有策略类
+    strategy_classes: list[type[Strategy]] = []
+    for sf in strategy_files:
+        spec = importlib.util.spec_from_file_location("strategy_module", sf)
+        if spec is None or spec.loader is None:
+            continue
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        for attr_name in dir(module):
+            obj = getattr(module, attr_name)
+            try:
+                if isinstance(obj, type) and issubclass(obj, Strategy) and obj is not Strategy:
+                    strategy_classes.append(obj)
+                    break
+            except TypeError:
+                pass
+
+    if len(strategy_classes) < 2:
+        click.echo("[!] 策略数量不足 2 个，跳过组合回测")
+        return
+
+    from math import comb
+
+    for size in combo_sizes:
+        total = comb(len(strategy_classes), size)
+        click.echo("\n" + "=" * 80)
+        click.echo(f"[*] {size}因子组合回测 (共{total}组, 模式={combo_mode})")
+        click.echo("=" * 80)
+
+        runner = CombinationRunner(
+            strategy_classes=strategy_classes,
+            df=df,
+            cash=cash,
+            commission=commission,
+        )
+
+        results = runner.screen(combo_sizes=(size,), mode=combo_mode.upper())
+
+        if not results:
+            click.echo("  无有效交易组合（所有组合均为零交易）")
+            continue
+
+        # 表头
+        click.echo(
+            f"{'排名':>4}  {'因子组合':<50} {'总收益率':>10} {'年化收益':>10} "
+            f"{'最大回撤':>10} {'夏普':>8} {'胜率':>8} {'交易':>6}"
+        )
+        click.echo("-" * 120)
+
+        for i, r in enumerate(results[:20], 1):  # 只显示 top 20
+            medal = " *1*" if i == 1 else " *2*" if i == 2 else " *3*" if i == 3 else "    "
+            perf = r.result.performance
+            click.echo(
+                f"{medal}{i:>2}  {r.name:<50} "
+                f"{perf.get('total_return', 0):>9.2%} "
+                f"{perf.get('annual_return', 0):>9.2%} "
+                f"{perf.get('max_drawdown', 0):>9.2%} "
+                f"{perf.get('sharpe', 0):>8.2f} "
+                f"{perf.get('win_rate', 0):>7.1%} "
+                f"{perf.get('total_trades', 0):>6}"
+            )
+
+        if len(results) > 20:
+            click.echo(f"  ... 共 {len(results)} 个有效组合，仅显示前 20")
+
+        # 最佳组合详细报告
+        best = results[0]
+        bp = best.result.performance
+        click.echo(f"\n[BEST {size}因子] {best.name}")
+        click.echo(f"  总收益率: {bp.get('total_return', 0):.2%}")
+        click.echo(f"  年化收益: {bp.get('annual_return', 0):.2%}")
+        click.echo(f"  最大回撤: {bp.get('max_drawdown', 0):.2%}")
+        click.echo(f"  夏普比率: {bp.get('sharpe', 0):.2f}")
+        click.echo(f"  胜率:     {bp.get('win_rate', 0):.1%}")
+
+
 def _show_best_chart(
     df: Any,
     result: Any,
@@ -95,8 +186,7 @@ def _show_best_chart(
     eq_dates = equity["datetime"]
     eq_values = equity["total"].values / initial_cash
     ax2 = ax1.twinx()
-    ax2.plot(eq_dates, eq_values, color="crimson", linewidth=1.5,
-             label=f"策略: {strategy_name}")
+    ax2.plot(eq_dates, eq_values, color="crimson", linewidth=1.5, label=f"策略: {strategy_name}")
     ax2.set_ylabel("资金曲线 (归一化)", color="crimson", fontsize=11)
     ax2.tick_params(axis="y", labelcolor="crimson")
 
@@ -109,13 +199,23 @@ def _show_best_chart(
             ax2.scatter(
                 buy_trades["datetime"].values,
                 _map_trade_values(buy_trades, equity, initial_cash),
-                marker="^", color="green", s=30, alpha=0.7, zorder=5, label="买入",
+                marker="^",
+                color="green",
+                s=30,
+                alpha=0.7,
+                zorder=5,
+                label="买入",
             )
         if not sell_trades.empty:
             ax2.scatter(
                 sell_trades["datetime"].values,
                 _map_trade_values(sell_trades, equity, initial_cash),
-                marker="v", color="orange", s=30, alpha=0.7, zorder=5, label="卖出",
+                marker="v",
+                color="orange",
+                s=30,
+                alpha=0.7,
+                zorder=5,
+                label="卖出",
             )
 
     # 标题：股票代码 + 名称 + 策略绩效
@@ -150,6 +250,20 @@ def _show_best_chart(
 @click.option("--commission", default=0.0003, type=float, help="佣金率")
 @click.option("--adjust", default="QFQ", help="复权: NONE/QFQ/HFQ")
 @click.option("--period", default="DAILY", help="K线周期")
+@click.option(
+    "--combo",
+    "combo_sizes",
+    multiple=True,
+    type=int,
+    help="多因子组合回测（可多次指定，如 --combo 2 --combo 3）",
+)
+@click.option(
+    "--combo-mode",
+    "combo_mode",
+    default="MAJORITY",
+    type=click.Choice(["AND", "OR", "MAJORITY"], case_sensitive=False),
+    help="多因子信号合并模式（默认 MAJORITY）",
+)
 @click.option("--show", "show_chart", is_flag=True, help="显示最佳策略资金曲线 vs 股价对比图")
 def run_all(
     market: str,
@@ -159,6 +273,8 @@ def run_all(
     commission: float,
     adjust: str,
     period: str,
+    combo_sizes: tuple[int, ...],
+    combo_mode: str,
     show_chart: bool,
 ) -> None:
     """批量运行 strategies/ 目录下所有策略并比较结果。"""
@@ -253,27 +369,31 @@ def run_all(
             perf = result.performance
             click.echo(f" 完成 ({elapsed:.1f}s)")
 
-            results.append({
-                "strategy": strategy_name,
-                "total_return": perf.get("total_return", 0),
-                "annual_return": perf.get("annual_return", 0),
-                "max_drawdown": perf.get("max_drawdown", 0),
-                "sharpe": perf.get("sharpe", 0),
-                "sortino": perf.get("sortino", 0),
-                "calmar": perf.get("calmar", 0),
-                "win_rate": perf.get("win_rate", 0),
-                "total_trades": perf.get("total_trades", 0),
-                "profit_factor": perf.get("profit_factor", 0),
-                "volatility": perf.get("volatility", 0),
-            })
+            results.append(
+                {
+                    "strategy": strategy_name,
+                    "total_return": perf.get("total_return", 0),
+                    "annual_return": perf.get("annual_return", 0),
+                    "max_drawdown": perf.get("max_drawdown", 0),
+                    "sharpe": perf.get("sharpe", 0),
+                    "sortino": perf.get("sortino", 0),
+                    "calmar": perf.get("calmar", 0),
+                    "win_rate": perf.get("win_rate", 0),
+                    "total_trades": perf.get("total_trades", 0),
+                    "profit_factor": perf.get("profit_factor", 0),
+                    "volatility": perf.get("volatility", 0),
+                }
+            )
             backtest_results[strategy_name] = result
         except Exception as e:
             elapsed = time.perf_counter() - t0
             click.echo(f" 错误 ({elapsed:.1f}s): {e}")
-            results.append({
-                "strategy": strategy_name,
-                "error": str(e),
-            })
+            results.append(
+                {
+                    "strategy": strategy_name,
+                    "error": str(e),
+                }
+            )
 
     # 4. 输出排名
     click.echo("\n" + "=" * 80)
@@ -400,7 +520,18 @@ def run_all(
         for r in errored:
             click.echo(f"  {r['strategy']}: {r['error']}")
 
-    # 5. 展示最佳策略曲线图
+    # 5. 多因子组合回测
+    if combo_sizes:
+        _run_combo_screen(
+            strategy_files=strategy_files,
+            df=df,
+            cash=cash,
+            commission=commission,
+            combo_sizes=combo_sizes,
+            combo_mode=combo_mode,
+        )
+
+    # 6. 展示最佳策略曲线图
     if show_chart and valid:
         best_name = valid[0]["strategy"]
         if best_name in backtest_results:

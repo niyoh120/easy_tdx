@@ -20,6 +20,7 @@
     print(result.performance)
 """
 
+from easy_tdx.backtest.combo import CombinationRunner, ComboResult, FactorSignals  # noqa: F401
 from easy_tdx.backtest.engine import BacktestEngine  # noqa: F401
 from easy_tdx.backtest.strategy import Strategy, StrategyDataProxy, crossover  # noqa: F401
 from easy_tdx.backtest.types import BacktestResult, Position, Signal, Trade  # noqa: F401
@@ -27,6 +28,9 @@ from easy_tdx.backtest.types import BacktestResult, Position, Signal, Trade  # n
 __all__ = [
     "BacktestEngine",
     "BacktestResult",
+    "CombinationRunner",
+    "ComboResult",
+    "FactorSignals",
     "Strategy",
     "StrategyDataProxy",
     "Signal",

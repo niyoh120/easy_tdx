@@ -14,6 +14,19 @@ import click
 @click.argument("code")
 @click.option("--strategy", "strategy_str", default=None, help="DSL 策略表达式 (P1)")
 @click.option("--strategy-file", "strategy_file", default=None, help="Python 策略文件路径")
+@click.option(
+    "--combo-strategies",
+    "combo_strategies",
+    default=None,
+    help="多因子组合：逗号分隔的策略文件路径（如 strats/a.py,strats/b.py,strats/c.py）",
+)
+@click.option(
+    "--combo-mode",
+    "combo_mode",
+    default="MAJORITY",
+    type=click.Choice(["AND", "OR", "MAJORITY"], case_sensitive=False),
+    help="多因子信号合并模式（默认 MAJORITY）",
+)
 @click.option("--cash", default=100000.0, type=float, help="初始资金")
 @click.option("--commission", default=0.0003, type=float, help="佣金率")
 @click.option(
@@ -33,6 +46,8 @@ def backtest(
     code: str,
     strategy_str: str | None,
     strategy_file: str | None,
+    combo_strategies: str | None,
+    combo_mode: str,
     cash: float,
     commission: float,
     execution: str,
@@ -52,16 +67,27 @@ def backtest(
       easy-tdx backtest SH 600519 --strategy-file ma_cross.py --table
 
       easy-tdx backtest SZ 000001 --strategy-file my_strategy.py --indicators MACD,KDJ
+
+      easy-tdx backtest SZ 000001 \
+        --combo-strategies strategies/macd_cross.py,strategies/rsi_reversal.py \
+        --combo-mode MAJORITY --table
     """
     from ..backtest.engine import BacktestEngine
     from ..cli.conn import get_mac_client
     from ..cli.parsers import parse_adjust, parse_market, parse_period
     from ..indicator import compute_indicators
 
-    # 1. 加载策略
-    strategy = _load_strategy(strategy_str, strategy_file)
+    # 1. 加载策略（单策略 or 多因子组合）
+    is_combo = combo_strategies is not None
+    strategy = None
+
+    if is_combo:
+        strategy = _load_combo_strategies(combo_strategies)
+    else:
+        strategy = _load_strategy(strategy_str, strategy_file)
+
     if strategy is None:
-        click.echo("错误: 必须指定 --strategy-file 或 --strategy", err=True)
+        click.echo("错误: 必须指定 --strategy-file / --combo-strategies / --strategy", err=True)
         raise SystemExit(1)
 
     # 2. 获取数据
@@ -82,13 +108,29 @@ def backtest(
         df = compute_indicators(df, indicator_list)
 
     # 4. 创建引擎并运行
-    engine = BacktestEngine(
-        strategy=strategy,
-        cash=cash,
-        commission=commission,
-        execution=execution,
-    )
-    result = engine.run(df)
+    if is_combo:
+        from ..backtest.combo import CombinationRunner
+
+        assert strategy is not None  # for type checker
+        runner = CombinationRunner(
+            strategy_classes=strategy,
+            df=df,
+            cash=cash,
+            commission=commission,
+            execution=execution,
+        )
+        result = runner.run_combination(
+            indices=list(range(len(strategy))),
+            mode=combo_mode.upper(),
+        )
+    else:
+        engine = BacktestEngine(
+            strategy=strategy,
+            cash=cash,
+            commission=commission,
+            execution=execution,
+        )
+        result = engine.run(df)
 
     # 5. 输出结果
     fmt = "table" if use_table else output_fmt
@@ -100,9 +142,7 @@ def backtest(
         click.echo(result.to_json())
 
 
-def _load_strategy(
-    strategy_str: str | None, strategy_file: str | None
-) -> type | None:
+def _load_strategy(strategy_str: str | None, strategy_file: str | None) -> type | None:
     """加载策略类。
 
     优先从 Python 文件加载，其次从 DSL 表达式加载（未实现）。
@@ -154,11 +194,7 @@ def _load_strategy_from_file(path: str) -> type:
     for name in dir(module):
         obj = getattr(module, name)
         try:
-            if (
-                isinstance(obj, type)
-                and issubclass(obj, Strategy)
-                and obj is not Strategy
-            ):
+            if isinstance(obj, type) and issubclass(obj, Strategy) and obj is not Strategy:
                 strategy_classes.append(obj)
         except TypeError:
             pass
@@ -171,6 +207,30 @@ def _load_strategy_from_file(path: str) -> type:
         click.echo(f"警告: 文件包含多个 Strategy 子类，使用第一个: {path}", err=True)
 
     return strategy_classes[0]
+
+
+def _load_combo_strategies(combo_strategies: str) -> list[type]:
+    """从逗号分隔的路径列表加载多个策略类。
+
+    Args:
+        combo_strategies: 逗号分隔的策略文件路径
+
+    Returns:
+        Strategy 子类列表
+    """
+    paths = [p.strip() for p in combo_strategies.split(",") if p.strip()]
+    if len(paths) < 2:
+        click.echo("错误: --combo-strategies 至少需要 2 个策略文件", err=True)
+        raise SystemExit(1)
+
+    classes: list[type] = []
+    for p in paths:
+        cls = _load_strategy_from_file(p)
+        classes.append(cls)
+
+    names = [c.__name__ for c in classes]
+    click.echo(f"[*] 多因子组合 ({len(classes)} 因子): {' + '.join(names)}")
+    return classes
 
 
 def _print_table(result: Any) -> None:

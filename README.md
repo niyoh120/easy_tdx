@@ -300,6 +300,48 @@ python -X utf8 run_all_strategies.py SZ 300308 --count 2000 --cash 1000000 --adj
 python -X utf8 run_all_strategies.py SZ 300308 --count 2000 --cash 1000000 --adjust QFQ --show
 ```
 
+**多因子组合回测：**
+
+自动遍历所有 2 因子 / 3 因子组合，找到最优搭配：
+
+```bash
+# 自动寻找最佳 2 因子和 3 因子组合（MAJORITY 模式）
+python -X utf8 run_all_strategies.py SZ 300308 --combo 2 --combo 3 --combo-mode majority
+
+# 也可用 AND / OR 模式
+python -X utf8 run_all_strategies.py SZ 300308 --combo 2 --combo-mode and
+```
+
+CLI 指定策略文件组合：
+
+```bash
+easy-tdx backtest SZ 000001 \
+  --combo-strategies strategies/macd_cross.py,strategies/rsi_reversal.py,strategies/bollinger_breakout.py \
+  --combo-mode majority --table
+```
+
+Python API：
+
+```python
+from easy_tdx.backtest import CombinationRunner
+
+runner = CombinationRunner(
+    strategy_classes=[MACDStrategy, RSIStrategy, BollingerStrategy],
+    df=df, cash=100000,
+)
+results = runner.screen(combo_sizes=(2, 3), mode="MAJORITY")
+for r in results[:5]:
+    print(f"{r.name}: 收益={r.result.performance['total_return']:.2%}")
+```
+
+信号合并模式：
+
+| 模式 | 买入条件 | 卖出条件 | 特点 |
+|------|---------|---------|------|
+| `AND` | 所有因子都看多 | 所有因子都看空 | 极保守，交易少但精确 |
+| `MAJORITY` | 过半因子看多 | 过半因子看空 | 平衡，推荐默认 |
+| `OR` | 任一因子看多 | 任一因子看空 | 激进，信号多噪声大 |
+
 `--show` 会用 matplotlib 弹出一个双轴对比窗口：左轴蓝色线是归一化股价，右轴红色线是最佳策略的资金曲线，绿三角=买入、黄三角=卖出，标题显示股票名称和关键绩效指标。需要 `pip install matplotlib`。
 
 输出示例（以 SZ 300308 为例）：
@@ -1087,7 +1129,7 @@ src/easy_tdx/
 ├── commands/          # 标准协议命令（无 IO）
 ├── codec/             # price / volume / datetime / frame / bitmap 编解码
 ├── chanlun/           # 缠论技术分析（K线合并/分型/笔/线段/中枢/买卖点/背驰）
-├── backtest/          # 回测引擎（Strategy基类/向量化引擎/绩效分析）
+├── backtest/          # 回测引擎（Strategy基类/向量化引擎/多因子组合/绩效分析）
 ├── models/            # 纯 dataclass，无业务逻辑
 ├── offline/           # 离线数据读写模块（读取 + 写入同步）
 └── cli/               # easy-tdx CLI（click）
@@ -1115,6 +1157,18 @@ ruff format --check src/ tests/                              # format check
 详见 [NOTICE](NOTICE) 和 [LICENSE](LICENSE)。
 
 ## Changelog
+
+### 1.9.0 (2026-06-10)
+
+**多因子组合回测** — 新增组合回测引擎，支持 2-3 个因子信号叠加，自动遍历所有组合寻找最优搭配。
+
+- 新增 `backtest/combo.py` 模块：`CombinationRunner`、`extract_factor_signals`、`combine_masks`、`FactorSignals`、`ComboResult`
+- 信号合并模式：AND（全部同意）、OR（任一同意）、MAJORITY（过半同意）
+- CLI 新增 `--combo-strategies` 和 `--combo-mode` 参数，支持指定策略文件组合回测
+- `run_all_strategies.py` 新增 `--combo` 和 `--combo-mode` 选项，自动遍历 C(N,2)/C(N,3) 所有组合并排名
+- 核心思路：预提取 N 个因子信号（只跑一次）→ 遍历组合合并遮罩（纯 numpy）→ 批量回测排名
+- 新增 14 个单元测试（离线，无需网络）
+- 修复 MyTT `MFI()` / `CR()` 指标分母为零时的 RuntimeWarning
 
 ### 1.8.2 (2026-06-09)
 
