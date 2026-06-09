@@ -19,6 +19,7 @@ from .cmd_offline import offline
 from .cmd_quote import quote, quote_list
 from .cmd_tick import tick
 from .cmd_transaction import transaction
+from ..backtest.cli import backtest
 
 
 @click.group()
@@ -66,3 +67,4 @@ cli.add_command(indicator)
 cli.add_command(indicator_list)
 cli.add_command(offline)
 cli.add_command(chanlun)
+cli.add_command(backtest)
