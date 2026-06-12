@@ -114,7 +114,7 @@ def _create_app(
         return get_redoc_html(
             openapi_url=app.openapi_url or "/openapi.json",
             title=app.title + " - ReDoc",
-            redoc_js_url="https://cdn.jsdelivr.net/npm/redoc@3.0.0-rc.0/bundle/redoc.js",
+            redoc_js_url="https://cdn.jsdelivr.net/npm/redoc@2.2.0/bundles/redoc.standalone.js",
         )
 
     # Store connection config in app.state for lifespan to use
