@@ -1,4 +1,5 @@
 """权重优化器。"""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -26,9 +27,11 @@ _OPTIMIZER_REGISTRY: dict[str, type[WeightOptimizer]] = {}
 
 def register_optimizer(name: str) -> type[WeightOptimizer]:
     """注册优化器。"""
+
     def wrapper(cls: type[WeightOptimizer]) -> type[WeightOptimizer]:
         _OPTIMIZER_REGISTRY[name] = cls
         return cls
+
     return wrapper
 
 
@@ -122,6 +125,7 @@ class MeanVarianceOptimizer(WeightOptimizer):
     ) -> dict[str, float]:
         try:
             from scipy.optimize import minimize  # noqa: F401
+
             return self._optimize_with_scipy(factor_scores, n_stocks)
         except ImportError:
             fallback = EqualWeightOptimizer()

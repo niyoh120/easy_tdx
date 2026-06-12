@@ -1,4 +1,5 @@
 """组合管理数据结构。"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

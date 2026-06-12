@@ -1,4 +1,5 @@
 """简化风险模型。"""
+
 from __future__ import annotations
 
 import numpy as np
@@ -48,4 +49,8 @@ class RiskModel:
         risk_contrib = np.abs(w * marginal)
         total_rc = risk_contrib.sum()
         max_rc = float(risk_contrib.max() / total_rc) if total_rc > 0 else 0.0
-        return {"total_volatility": total_vol, "max_risk_contribution": max_rc, "n_positions": len(codes)}
+        return {
+            "total_volatility": total_vol,
+            "max_risk_contribution": max_rc,
+            "n_positions": len(codes),
+        }

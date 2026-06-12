@@ -1,4 +1,5 @@
 """多期调仓回测引擎。"""
+
 from __future__ import annotations
 
 import numpy as np
@@ -111,21 +112,38 @@ class RebalanceEngine:
                     if holdings[c] > 0 and c in prices:
                         weights[c] = holdings[c] * prices[c] / total_value
 
-            states.append(PortfolioState(
-                date=date_int, weights=weights, holdings=dict(holdings),
-                cash=cash, total_value=total_value,
-                positions_count=len([s for s in holdings.values() if s > 0]),
-            ))
-            equity_records.append({"datetime": date_int, "total": total_value, "cash": cash, "position_value": position_value})
+            states.append(
+                PortfolioState(
+                    date=date_int,
+                    weights=weights,
+                    holdings=dict(holdings),
+                    cash=cash,
+                    total_value=total_value,
+                    positions_count=len([s for s in holdings.values() if s > 0]),
+                )
+            )
+            equity_records.append(
+                {
+                    "datetime": date_int,
+                    "total": total_value,
+                    "cash": cash,
+                    "position_value": position_value,
+                }
+            )
 
         equity_curve = pd.DataFrame(equity_records)
-        trades_df = pd.DataFrame(trades_list) if trades_list else pd.DataFrame(
-            columns=["datetime", "direction", "code", "shares", "price", "cost"]
+        trades_df = (
+            pd.DataFrame(trades_list)
+            if trades_list
+            else pd.DataFrame(columns=["datetime", "direction", "code", "shares", "price", "cost"])
         )
         performance = self._compute_performance(equity_curve)
         return RebalanceResult(
-            rebalance_dates=rebalance_dates, states=states, trades=trades_df,
-            equity_curve=equity_curve, performance=performance,
+            rebalance_dates=rebalance_dates,
+            states=states,
+            trades=trades_df,
+            equity_curve=equity_curve,
+            performance=performance,
         )
 
     def _rebalance(
@@ -145,7 +163,16 @@ class RebalanceEngine:
                     sell_value = holdings[code] * price
                     cost = sell_value * (self._commission + self._slippage)
                     cash += sell_value - cost
-                    trades_list.append({"datetime": date_int, "direction": "SELL", "code": code, "shares": holdings[code], "price": price, "cost": cost})
+                    trades_list.append(
+                        {
+                            "datetime": date_int,
+                            "direction": "SELL",
+                            "code": code,
+                            "shares": holdings[code],
+                            "price": price,
+                            "cost": cost,
+                        }
+                    )
                 del holdings[code]
 
         new_holdings: dict[str, float] = {}
@@ -159,7 +186,16 @@ class RebalanceEngine:
                 new_holdings[code] = shares
                 trade_value = shares * price
                 cost = trade_value * (self._commission + self._slippage)
-                trades_list.append({"datetime": date_int, "direction": "BUY", "code": code, "shares": shares, "price": price, "cost": cost})
+                trades_list.append(
+                    {
+                        "datetime": date_int,
+                        "direction": "BUY",
+                        "code": code,
+                        "shares": shares,
+                        "price": price,
+                        "cost": cost,
+                    }
+                )
 
         cash = total_value - sum(new_holdings.get(c, 0) * prices.get(c, 0) for c in new_holdings)
         holdings.clear()
@@ -178,13 +214,31 @@ class RebalanceEngine:
         max_drawdown = float(np.min(drawdown))
         daily_ret = np.diff(total) / total[:-1]
         daily_ret = daily_ret[~np.isnan(daily_ret)]
-        sharpe = float(np.mean(daily_ret) / np.std(daily_ret) * np.sqrt(252)) if len(daily_ret) > 1 and np.std(daily_ret) > 0 else 0.0
-        return {"total_return": total_return, "annual_return": annual_return, "max_drawdown": max_drawdown, "sharpe": sharpe, "total_trades": len(equity_curve)}
+        sharpe = (
+            float(np.mean(daily_ret) / np.std(daily_ret) * np.sqrt(252))
+            if len(daily_ret) > 1 and np.std(daily_ret) > 0
+            else 0.0
+        )
+        return {
+            "total_return": total_return,
+            "annual_return": annual_return,
+            "max_drawdown": max_drawdown,
+            "sharpe": sharpe,
+            "total_trades": len(equity_curve),
+        }
 
     def _empty_result(self) -> RebalanceResult:
         return RebalanceResult(
-            rebalance_dates=[], states=[],
-            trades=pd.DataFrame(columns=["datetime", "direction", "code", "shares", "price", "cost"]),
+            rebalance_dates=[],
+            states=[],
+            trades=pd.DataFrame(
+                columns=["datetime", "direction", "code", "shares", "price", "cost"]
+            ),
             equity_curve=pd.DataFrame(columns=["datetime", "total", "cash", "position_value"]),
-            performance={"total_return": 0.0, "annual_return": 0.0, "max_drawdown": 0.0, "sharpe": 0.0},
+            performance={
+                "total_return": 0.0,
+                "annual_return": 0.0,
+                "max_drawdown": 0.0,
+                "sharpe": 0.0,
+            },
         )
