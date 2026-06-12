@@ -8,6 +8,7 @@ import pytest
 from easy_tdx.backtest.execution import (
     ExecutionModel,
     ImmediateExecution,
+    LimitExecution,
     TWAPExecution,
     VWAPExecution,
 )
@@ -319,3 +320,101 @@ class TestVWAPExecution:
             slippage_model=None,
         )
         assert len(trades) <= 4
+
+
+class TestLimitExecution:
+    """限价单执行。"""
+
+    def test_buy_limit_filled(self) -> None:
+        df = _make_df(20)
+        model = LimitExecution(ttl_bars=5)
+        signal = Signal(datetime=20240101, direction="BUY", size=100, price=100.0)
+        trades = model.execute(
+            signal=signal,
+            df=df,
+            bar_idx=0,
+            cash=20000,
+            position=0,
+            position_mode="fixed",
+            commission=0.0003,
+            min_commission=5.0,
+            stamp_tax=0.001,
+            slippage_model=None,
+        )
+        assert len(trades) == 1
+        assert trades[0].price == 100.0
+        assert trades[0].direction == "BUY"
+
+    def test_sell_limit_filled(self) -> None:
+        df = _make_df(20)
+        model = LimitExecution(ttl_bars=5)
+        signal = Signal(datetime=20240101, direction="SELL", size=100, price=105.0)
+        trades = model.execute(
+            signal=signal,
+            df=df,
+            bar_idx=0,
+            cash=0,
+            position=200,
+            position_mode="fixed",
+            commission=0.0003,
+            min_commission=5.0,
+            stamp_tax=0.001,
+            slippage_model=None,
+        )
+        assert len(trades) == 1
+        assert trades[0].price == 105.0
+
+    def test_limit_not_triggered(self) -> None:
+        df = _make_df(10)
+        model = LimitExecution(ttl_bars=3)
+        signal = Signal(datetime=20240101, direction="BUY", size=100, price=50.0)
+        trades = model.execute(
+            signal=signal,
+            df=df,
+            bar_idx=0,
+            cash=20000,
+            position=0,
+            position_mode="fixed",
+            commission=0.0003,
+            min_commission=5.0,
+            stamp_tax=0.001,
+            slippage_model=None,
+        )
+        assert len(trades) == 0
+
+    def test_no_price_falls_back_to_immediate(self) -> None:
+        df = _make_df(10)
+        model = LimitExecution(ttl_bars=5)
+        signal = Signal(datetime=20240101, direction="BUY", size=100, price=None)
+        trades = model.execute(
+            signal=signal,
+            df=df,
+            bar_idx=0,
+            cash=20000,
+            position=0,
+            position_mode="fixed",
+            commission=0.0003,
+            min_commission=5.0,
+            stamp_tax=0.001,
+            slippage_model=None,
+        )
+        assert len(trades) == 1
+        assert trades[0].price == 101.0
+
+    def test_ttl_expires(self) -> None:
+        df = _make_df(20)
+        model = LimitExecution(ttl_bars=2)
+        signal = Signal(datetime=20240101, direction="BUY", size=100, price=98.0)
+        trades = model.execute(
+            signal=signal,
+            df=df,
+            bar_idx=0,
+            cash=20000,
+            position=0,
+            position_mode="fixed",
+            commission=0.0003,
+            min_commission=5.0,
+            stamp_tax=0.001,
+            slippage_model=None,
+        )
+        assert len(trades) == 0

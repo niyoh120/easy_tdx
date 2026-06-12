@@ -521,3 +521,116 @@ class VWAPExecution(ExecutionModel):
                 )
             )
         return trades
+
+
+class LimitExecution(ExecutionModel):
+    """限价单执行。
+
+    在目标价位挂单，仅当 bar_low <= price（买入）或 bar_high >= price（卖出）时成交。
+    无限价时退化为 ImmediateExecution。
+    """
+
+    def __init__(self, ttl_bars: int = 5) -> None:
+        self._ttl_bars = max(1, ttl_bars)
+        self._fallback = ImmediateExecution()
+
+    def execute(
+        self,
+        signal: Signal,
+        df: pd.DataFrame,
+        bar_idx: int,
+        cash: float,
+        position: float,
+        position_mode: str,
+        commission: float,
+        min_commission: float,
+        stamp_tax: float,
+        slippage_model: SlippageModel | None,
+    ) -> list[Trade]:
+        if signal.price is None:
+            return self._fallback.execute(
+                signal,
+                df,
+                bar_idx,
+                cash,
+                position,
+                position_mode,
+                commission,
+                min_commission,
+                stamp_tax,
+                slippage_model,
+            )
+
+        target_price = signal.price
+
+        for i in range(self._ttl_bars):
+            exec_idx = bar_idx + 1 + i
+            if exec_idx >= len(df):
+                break
+            row = df.iloc[exec_idx]
+            triggered = False
+            if signal.direction == "BUY" and float(row["low"]) <= target_price:
+                triggered = True
+            elif signal.direction == "SELL" and float(row["high"]) >= target_price:
+                triggered = True
+
+            if triggered:
+                if signal.direction == "BUY":
+                    size = self._calc_buy_size(
+                        signal.size,
+                        target_price,
+                        cash,
+                        position_mode,
+                        commission,
+                    )
+                    if size <= 0:
+                        return []
+                    comm = self._calc_commission(
+                        size,
+                        target_price,
+                        False,
+                        commission,
+                        min_commission,
+                        stamp_tax,
+                    )
+                    slip = self._calc_slippage(
+                        size,
+                        target_price,
+                        False,
+                        slippage_model,
+                        df,
+                    )
+                else:
+                    size = signal.size if signal.size > 0 else position
+                    if size <= 0:
+                        return []
+                    if size > position:
+                        size = position
+                    comm = self._calc_commission(
+                        size,
+                        target_price,
+                        True,
+                        commission,
+                        min_commission,
+                        stamp_tax,
+                    )
+                    slip = self._calc_slippage(
+                        size,
+                        target_price,
+                        True,
+                        slippage_model,
+                        df,
+                    )
+
+                return [
+                    Trade(
+                        datetime=self._get_datetime_int(df, exec_idx),
+                        direction=signal.direction,
+                        size=float(size),
+                        price=target_price,
+                        commission=comm,
+                        slippage=slip,
+                    )
+                ]
+
+        return []
