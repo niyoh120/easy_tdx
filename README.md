@@ -1618,6 +1618,14 @@ ruff format --check src/ tests/                              # format check
 
 ## Changelog
 
+### 1.14.3 (2026-06-16)
+
+**缠论 CLI table 模式补日期** — 延续 v1.14.2 的可视化增强，在 `easy-tdx chanlun --table` 表格输出中也为中枢 / 买卖点 / 背驰带上对应日期，与 `笔` / `线段` 的风格对齐。日期缺失时显示 `—`。
+
+- **中枢**：`[idx] <start_date> → <end_date> zg=... zd=...`
+- **买卖点**：`<type> (<date>): <msg>`
+- **背驰**：`[✓/✗] <type> (<prev_date> → <curr_date>): <msg>`
+
 ### 1.14.2 (2026-06-16)
 
 **缠论结果可视化字段增强** — 响应 [Discussion #2](https://github.com/handsomejustin/easy-tdx/discussions/2)，为缠论分析 JSON 输出（`ChanlunResult.to_dict()`）中的中枢 / 买卖点 / 背驰补上对应 K 线日期，方便前端/可视化工具直接用来标点画图。纯增量、向后兼容，不破坏任何已有 JSON 字段。
