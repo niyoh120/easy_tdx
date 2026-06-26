@@ -1,6 +1,23 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with this repository.
+
+## 虚拟环境（必须）
+
+本项目所有 Python 命令**必须使用项目根目录下的 venv 虚拟环境**，不要用系统 Python 或其他环境。
+
+```bash
+# 激活 venv（Windows / Git Bash）
+source venv/Scripts/activate
+
+# 或直接用 venv 的解释器（无需激活）
+venv/Scripts/python.exe -m pytest ...
+venv/Scripts/python.exe -m mypy src/
+venv/Scripts/ruff check src/
+venv/Scripts/easy-tdx --help
+```
+
+easy-tdx 已在 venv 中以 editable 模式安装（`pip install -e .`），修改 `src/` 后即时生效，无需重装。
 
 ## Build / Test / Lint
 
