@@ -14,7 +14,14 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 
-from ._df import _add_minute_datetime, _merge_bar_datetime, _merge_txn_datetime, _to_df
+from ._df import (
+    _add_minute_datetime,
+    _apply_bar_time_align_df,
+    _category_to_minutes,
+    _merge_bar_datetime,
+    _merge_txn_datetime,
+    _to_df,
+)
 from .codec.block import parse_block_dat
 from .codec.financial import parse_financial_dat, parse_financial_file_list
 from .codec.industry import parse_tdxhy_cfg
@@ -446,10 +453,28 @@ class TdxClient:
         category: KlineCategory,
         start: int,
         count: int = 800,
+        *,
+        bar_time: str = "start",
     ) -> pd.DataFrame:
-        """获取 K 线数据（最多800条/次，按 start 分页）。"""
+        """获取 K 线数据（最多800条/次，按 start 分页）。
+
+        Args:
+            bar_time: 时间戳语义。 ``"start"``（默认）= bar 开始时间（通达信原始，
+                上午最后一根 5min 标 11:25、下午第一根标 13:00）；``"end"`` = bar 右端点
+                （= 开始 + 周期时长，与 Tushare/同花顺对齐，上午最后一根标 11:30）。
+                仅对分钟级周期生效；日线及以上不受影响。
+        """
         df = _to_df(self._execute(GetSecurityBarsCmd(market, code, category, start, count)))
-        return _merge_bar_datetime(df, category in _DAILY_PLUS)
+        delta = _category_to_minutes(int(category))
+        is_intraday = delta is not None
+        df = _apply_bar_time_align_df(
+            df,
+            is_intraday=is_intraday,
+            delta_minutes=delta,
+            bar_time=bar_time,
+            has_time_columns=True,
+        )
+        return _merge_bar_datetime(df, not is_intraday)
 
     def get_index_bars(
         self,
@@ -458,10 +483,25 @@ class TdxClient:
         category: KlineCategory,
         start: int,
         count: int = 800,
+        *,
+        bar_time: str = "start",
     ) -> pd.DataFrame:
-        """获取指数 K 线数据。"""
+        """获取指数 K 线数据。
+
+        Args:
+            bar_time: 见 :meth:`get_security_bars`，分钟级周期时间戳可对齐 Tushare 右端点。
+        """
         df = _to_df(self._execute(GetIndexBarsCmd(market, code, category, start, count)))
-        return _merge_bar_datetime(df, category in _DAILY_PLUS)
+        delta = _category_to_minutes(int(category))
+        is_intraday = delta is not None
+        df = _apply_bar_time_align_df(
+            df,
+            is_intraday=is_intraday,
+            delta_minutes=delta,
+            bar_time=bar_time,
+            has_time_columns=True,
+        )
+        return _merge_bar_datetime(df, not is_intraday)
 
     # ------------------------------------------------------------------ #
     # 分时
@@ -997,9 +1037,21 @@ class AsyncTdxClient:
         category: KlineCategory,
         start: int,
         count: int = 800,
+        *,
+        bar_time: str = "start",
     ) -> pd.DataFrame:
+        """获取 K 线数据。``bar_time`` 见同步版 :meth:`get_security_bars`。"""
         df = _to_df(await self._execute(GetSecurityBarsCmd(market, code, category, start, count)))
-        return _merge_bar_datetime(df, category in _DAILY_PLUS)
+        delta = _category_to_minutes(int(category))
+        is_intraday = delta is not None
+        df = _apply_bar_time_align_df(
+            df,
+            is_intraday=is_intraday,
+            delta_minutes=delta,
+            bar_time=bar_time,
+            has_time_columns=True,
+        )
+        return _merge_bar_datetime(df, not is_intraday)
 
     async def get_index_bars(
         self,
@@ -1008,9 +1060,21 @@ class AsyncTdxClient:
         category: KlineCategory,
         start: int,
         count: int = 800,
+        *,
+        bar_time: str = "start",
     ) -> pd.DataFrame:
+        """获取指数 K 线数据。``bar_time`` 见同步版 :meth:`get_index_bars`。"""
         df = _to_df(await self._execute(GetIndexBarsCmd(market, code, category, start, count)))
-        return _merge_bar_datetime(df, category in _DAILY_PLUS)
+        delta = _category_to_minutes(int(category))
+        is_intraday = delta is not None
+        df = _apply_bar_time_align_df(
+            df,
+            is_intraday=is_intraday,
+            delta_minutes=delta,
+            bar_time=bar_time,
+            has_time_columns=True,
+        )
+        return _merge_bar_datetime(df, not is_intraday)
 
     async def get_minute_time_data(self, market: Market, code: str) -> pd.DataFrame:
         today = _today_in_shanghai()

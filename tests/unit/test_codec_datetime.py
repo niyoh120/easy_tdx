@@ -62,3 +62,49 @@ class TestGetTime:
         h, mi, pos = get_time(data, 0)
         assert h == 14 and mi == 30
         assert pos == 2
+
+
+class TestCategoryToMinutes:
+    """分钟级 KlineCategory → 每根 bar 的分钟数；日线及以上返回 None。"""
+
+    def test_minute_categories(self):
+        from easy_tdx._df import _category_to_minutes
+
+        # MIN_5/15/30/60/1/3
+        assert _category_to_minutes(0) == 5
+        assert _category_to_minutes(1) == 15
+        assert _category_to_minutes(2) == 30
+        assert _category_to_minutes(3) == 60
+        assert _category_to_minutes(7) == 1
+        assert _category_to_minutes(8) == 3
+
+    def test_daily_plus_returns_none(self):
+        from easy_tdx._df import _category_to_minutes
+
+        for cat in (4, 5, 6, 9, 10, 11):  # DAY/WEEK/MONTH/YEAR/SEASON/YEAR_ALT
+            assert _category_to_minutes(cat) is None
+
+
+class TestPeriodToMinutes:
+    """MAC 协议 Period → 每根 bar 的分钟数。"""
+
+    def test_basic_periods(self):
+        from easy_tdx._df import _period_to_minutes
+
+        assert _period_to_minutes(0) == 5  # MIN_5
+        assert _period_to_minutes(1) == 15  # MIN_15
+        assert _period_to_minutes(2) == 30  # MIN_30
+        assert _period_to_minutes(3) == 60  # MIN_60
+        assert _period_to_minutes(7) == 1  # MIN_1
+
+    def test_mins_multiplied_by_times(self):
+        from easy_tdx._df import _period_to_minutes
+
+        assert _period_to_minutes(8, 1) == 5  # MINS ×1
+        assert _period_to_minutes(8, 3) == 15  # MINS ×3 = 15 分钟线
+
+    def test_daily_plus_and_seconds_return_none(self):
+        from easy_tdx._df import _period_to_minutes
+
+        for p in (4, 5, 6, 9, 10, 11, 13):  # DAILY/WEEKLY/MONTHLY/DAYS/QUARTERLY/YEARLY/SECONDS
+            assert _period_to_minutes(p) is None

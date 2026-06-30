@@ -11,7 +11,7 @@ from typing import Any, TypeVar
 
 import pandas as pd
 
-from .._df import _to_df
+from .._df import _apply_bar_time_align_df, _period_to_minutes, _to_df
 from ..codec.bitmap import Fields, PresetField
 from ..commands.base import BaseCommand
 from ..config import get_best_host, get_mac_hosts, get_port, get_timeout, save_best_host
@@ -339,6 +339,8 @@ class MacClient:
         count: int = 800,
         times: int = 1,
         adjust: Adjust = Adjust.NONE,
+        *,
+        bar_time: str = "start",
     ) -> pd.DataFrame:
         """获取 K 线数据（自动分页，每页最多 700 条）。
 
@@ -350,6 +352,10 @@ class MacClient:
             count: 总请求条数。
             times: 周期倍数（Period.MINS/DAYS 时有效）。
             adjust: 复权方式。
+            bar_time: 时间戳语义。 ``"start"``（默认）= bar 开始时间（通达信原始，
+                上午最后一根 5min 标 11:25、下午第一根标 13:00）；``"end"`` = bar 右端点
+                （= 开始 + 周期时长，与 Tushare/同花顺对齐，上午最后一根标 11:30）。
+                仅对分钟级周期生效；日线及以上不受影响。
         """
         all_bars: list[MacBar] = []
         fetched = 0
@@ -376,7 +382,16 @@ class MacClient:
             if len(bars) < page_size:
                 break
 
-        return _to_df(all_bars)
+        df = _to_df(all_bars)
+        delta = _period_to_minutes(period, times)
+        is_intraday = delta is not None
+        return _apply_bar_time_align_df(
+            df,
+            is_intraday=is_intraday,
+            delta_minutes=delta,
+            bar_time=bar_time,
+            has_time_columns=False,
+        )
 
     def get_stock_kline_with_indicators(
         self,
@@ -387,6 +402,8 @@ class MacClient:
         count: int = 30,
         adjust: Adjust = Adjust.QFQ,
         params: dict[str, dict[str, int | float]] | None = None,
+        *,
+        bar_time: str = "start",
     ) -> pd.DataFrame:
         """获取 K 线数据并计算技术指标。
 
@@ -400,11 +417,14 @@ class MacClient:
             count: 返回条数（默认30）。
             adjust: 复权方式（默认前复权）。
             params: 可选指标参数覆盖。
+            bar_time: 见 :meth:`get_stock_kline`。
         """
         from ..indicator import compute_indicators
 
         fetch_count = max(120 + count, 200)
-        df = self.get_stock_kline(market, code, period=period, count=fetch_count, adjust=adjust)
+        df = self.get_stock_kline(
+            market, code, period=period, count=fetch_count, adjust=adjust, bar_time=bar_time
+        )
         if df.empty:
             return df
         return compute_indicators(df, indicators, params, tail=count)
@@ -1247,7 +1267,10 @@ class AsyncMacClient:
         count: int = 800,
         times: int = 1,
         adjust: Adjust = Adjust.NONE,
+        *,
+        bar_time: str = "start",
     ) -> pd.DataFrame:
+        """获取 K 线数据。``bar_time`` 见同步版 :meth:`get_stock_kline`。"""
         all_bars: list[MacBar] = []
         fetched = 0
         offset = start
@@ -1273,7 +1296,16 @@ class AsyncMacClient:
             if len(bars) < page_size:
                 break
 
-        return _to_df(all_bars)
+        df = _to_df(all_bars)
+        delta = _period_to_minutes(period, times)
+        is_intraday = delta is not None
+        return _apply_bar_time_align_df(
+            df,
+            is_intraday=is_intraday,
+            delta_minutes=delta,
+            bar_time=bar_time,
+            has_time_columns=False,
+        )
 
     async def get_stock_kline_with_indicators(
         self,
@@ -1284,6 +1316,8 @@ class AsyncMacClient:
         count: int = 30,
         adjust: Adjust = Adjust.QFQ,
         params: dict[str, dict[str, int | float]] | None = None,
+        *,
+        bar_time: str = "start",
     ) -> pd.DataFrame:
         """获取 K 线数据并计算技术指标（异步）。
 
@@ -1298,6 +1332,7 @@ class AsyncMacClient:
             period=period,
             count=fetch_count,
             adjust=adjust,
+            bar_time=bar_time,
         )
         if df.empty:
             return df

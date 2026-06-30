@@ -2,10 +2,50 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, is_dataclass
+import logging
+from dataclasses import asdict, is_dataclass, replace
 from typing import Any
 
 import pandas as pd
+
+logger = logging.getLogger(__name__)
+
+# K 线时间戳语义：通达信用 bar 开始时间，Tushare/同花顺用 bar 结束时间。
+# bar_time="end" 时给分钟级 bar 的时刻加上一个周期时长，以对齐 Tushare。
+_BAR_TIME_START = "start"
+_BAR_TIME_END = "end"
+
+# A 股 / 扩展行情 KlineCategory → 每根 bar 的分钟数（分钟级；日线及以上不在此表）。
+# category: 0=MIN_5 1=MIN_15 2=MIN_30 3=MIN_60 7=MIN_1 8=MIN_3。
+_CATEGORY_MINUTES: dict[int, int] = {0: 5, 1: 15, 2: 30, 3: 60, 7: 1, 8: 3}
+
+
+def _category_to_minutes(category: int) -> int | None:
+    """分钟级 KlineCategory → 每根 bar 的分钟数；日线及以上返回 None。"""
+    return _CATEGORY_MINUTES.get(int(category))
+
+
+def _period_to_minutes(period: int, times: int = 1) -> int | None:
+    """MAC 协议 Period → 每根 bar 的分钟数。
+
+    MINS / SECONDS 配合 times 倍数；日线及以上 / 秒级（按分钟粒度对齐无意义）返回 None。
+    """
+    # 与 symbol_bar.py 的 is_intraday 判定保持一致
+    _MAC_INTRADAY_MINUTES: dict[int, int] = {
+        0: 5,  # MIN_5
+        1: 15,  # MIN_15
+        2: 30,  # MIN_30
+        3: 60,  # MIN_60
+        7: 1,  # MIN_1
+        8: 5,  # MINS（×times）
+    }
+    base = _MAC_INTRADAY_MINUTES.get(int(period))
+    if base is None:
+        # 4=DAILY 5=WEEKLY 6=MONTHLY 9=DAYS 10=QUARTERLY 11=YEARLY 13=SECONDS 均不偏移
+        return None
+    if int(period) == 8:  # MINS：多分钟，乘以倍数
+        return base * max(int(times), 1)
+    return base
 
 
 def _to_df(data: Any) -> pd.DataFrame:
@@ -44,6 +84,80 @@ def _merge_datetime_fields(d: dict[str, Any]) -> dict[str, Any]:
         result.update({k: v for k, v in d.items() if k not in {"year", "month", "day"}})
         return result
     return d
+
+
+def _align_minutes_df(df: pd.DataFrame, delta_minutes: int) -> pd.DataFrame:
+    """对含 hour/minute 列的 DataFrame 做分钟级偏移（向量化，自动跨小时/跨日）。
+
+    用于 A 股 / 扩展行情路径：在 _merge_bar_datetime 拼字符串之前修正 hour/minute。
+    """
+    total = df["hour"] * 60 + df["minute"] + delta_minutes
+    df = df.copy()
+    df["hour"] = (total // 60) % 24
+    df["minute"] = total % 60
+    return df
+
+
+def _align_datetime_df(df: pd.DataFrame, delta_minutes: int) -> pd.DataFrame:
+    """对含 datetime 列的 DataFrame 做分钟级偏移（MAC 路径用）。"""
+    if "datetime" not in df.columns:
+        return df
+    df = df.copy()
+    df["datetime"] = df["datetime"] + pd.Timedelta(minutes=delta_minutes)
+    return df
+
+
+def _apply_bar_time_align_df(
+    df: pd.DataFrame,
+    *,
+    is_intraday: bool,
+    delta_minutes: int | None,
+    bar_time: str,
+    has_time_columns: bool,
+) -> pd.DataFrame:
+    """对 K 线 DataFrame 应用 bar 时间对齐。
+
+    Args:
+        is_intraday: 是否分钟级周期（False 时恒不偏移）。
+        delta_minutes: 每根 bar 的分钟数（None 或分钟级判定为 False 时不偏移）。
+        bar_time: "start"（默认，通达信原始）或 "end"（右端点，对齐 Tushare）。
+        has_time_columns: True=DataFrame 仍是分散的 hour/minute 列（A 股路径，
+            在 _merge_bar_datetime 之前调用）；False=已是 datetime 列（MAC 路径）。
+    """
+    if bar_time == _BAR_TIME_START:
+        return df
+    if not is_intraday or delta_minutes is None or delta_minutes <= 0:
+        return df
+    if df.empty:
+        return df
+    if has_time_columns:
+        if "hour" not in df.columns or "minute" not in df.columns:
+            return df
+        return _align_minutes_df(df, delta_minutes)
+    return _align_datetime_df(df, delta_minutes)
+
+
+def _apply_bar_time_align_bars(
+    bars: list[Any],
+    *,
+    is_intraday: bool,
+    delta_minutes: int | None,
+    bar_time: str,
+) -> list[Any]:
+    """对 K 线 dataclass 列表应用 bar 时间对齐（扩展行情 ex client 用，返回 dataclass）。
+
+    用 dataclasses.replace 重建（保持 dataclass 不可变语义），跨小时自动进位；
+    收盘 bar 不会跨日，故不处理跨日。
+    """
+    if bar_time == _BAR_TIME_START:
+        return bars
+    if not is_intraday or delta_minutes is None or delta_minutes <= 0:
+        return bars
+    result: list[Any] = []
+    for b in bars:
+        total = b.hour * 60 + b.minute + delta_minutes
+        result.append(replace(b, hour=(total // 60) % 24, minute=total % 60))
+    return result
 
 
 def _merge_bar_datetime(df: pd.DataFrame, daily_plus: bool) -> pd.DataFrame:

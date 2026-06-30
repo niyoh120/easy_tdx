@@ -1,10 +1,12 @@
 """扩展行情高层 API：ExTdxClient（同步）和 AsyncExTdxClient（asyncio）。"""
 
 import asyncio
+import logging
 from collections import OrderedDict
 from types import TracebackType
 from typing import TypeVar
 
+from .._df import _apply_bar_time_align_bars, _category_to_minutes
 from ..commands.base import BaseCommand
 from ..config import get_best_ex_host, get_ex_hosts, save_best_ex_host
 from ..exceptions import TdxConnectionError
@@ -33,6 +35,8 @@ from .models import (
 )
 from .transport.async_ import AsyncExTdxConnection
 from .transport.sync import ExTdxConnection, ping_ex_all
+
+logger = logging.getLogger(__name__)
 
 _DEFAULT_EX_PORT = 7727
 _T = TypeVar("_T")
@@ -169,9 +173,20 @@ class ExTdxClient:
         code: str,
         start: int = 0,
         count: int = 700,
+        *,
+        bar_time: str = "start",
     ) -> list[ExInstrumentBar]:
-        """获取K线数据。"""
-        return self._execute(GetExInstrumentBarsCmd(category, market, code, start, count))
+        """获取K线数据。
+
+        Args:
+            bar_time: 时间戳语义。 ``"start"``（默认）= bar 开始时间（通达信原始）；
+                ``"end"`` = bar 右端点（与 Tushare/同花顺对齐）。仅分钟级周期生效。
+        """
+        bars = self._execute(GetExInstrumentBarsCmd(category, market, code, start, count))
+        delta = _category_to_minutes(category)
+        return _apply_bar_time_align_bars(
+            bars, is_intraday=delta is not None, delta_minutes=delta, bar_time=bar_time
+        )
 
     def get_history_instrument_bars_range(
         self,
@@ -179,9 +194,23 @@ class ExTdxClient:
         code: str,
         start_date: int,
         end_date: int,
+        *,
+        bar_time: str = "start",
     ) -> list[ExInstrumentBar]:
-        """按日期范围获取历史K线。"""
-        return self._execute(GetExHistoryInstrumentBarsRangeCmd(market, code, start_date, end_date))
+        """按日期范围获取历史K线。
+
+        Note:
+            ``bar_time="end"`` 需要知道每根 bar 的周期时长，但本接口按日期范围查询、
+            不携带周期信息，无法推断。传入 ``"end"`` 时发出 warning 并原样返回（通达信
+            原始开始时间）。如需对齐 Tushare，请改用 :meth:`get_instrument_bars`。
+        """
+        bars = self._execute(GetExHistoryInstrumentBarsRangeCmd(market, code, start_date, end_date))
+        if bar_time == "end":
+            logger.warning(
+                "get_history_instrument_bars_range 不支持 bar_time='end'（缺少周期信息），"
+                "原样返回通达信开始时间。"
+            )
+        return bars
 
     # ------------------------------------------------------------------ #
     # 分时
@@ -392,8 +421,15 @@ class AsyncExTdxClient:
         code: str,
         start: int = 0,
         count: int = 700,
+        *,
+        bar_time: str = "start",
     ) -> list[ExInstrumentBar]:
-        return await self._execute(GetExInstrumentBarsCmd(category, market, code, start, count))
+        """获取K线数据。``bar_time`` 见同步版 :meth:`get_instrument_bars`。"""
+        bars = await self._execute(GetExInstrumentBarsCmd(category, market, code, start, count))
+        delta = _category_to_minutes(category)
+        return _apply_bar_time_align_bars(
+            bars, is_intraday=delta is not None, delta_minutes=delta, bar_time=bar_time
+        )
 
     async def get_history_instrument_bars_range(
         self,
@@ -401,10 +437,19 @@ class AsyncExTdxClient:
         code: str,
         start_date: int,
         end_date: int,
+        *,
+        bar_time: str = "start",
     ) -> list[ExInstrumentBar]:
-        return await self._execute(
+        """按日期范围获取历史K线。``bar_time`` 见同步版（不支持 ``"end"``）。"""
+        bars = await self._execute(
             GetExHistoryInstrumentBarsRangeCmd(market, code, start_date, end_date)
         )
+        if bar_time == "end":
+            logger.warning(
+                "get_history_instrument_bars_range 不支持 bar_time='end'（缺少周期信息），"
+                "原样返回通达信开始时间。"
+            )
+        return bars
 
     # ------------------------------------------------------------------ #
     # 分时

@@ -177,7 +177,7 @@ c.get_security_quotes(stocks: list[tuple[Market, str]]) -> list[SecurityQuote]
 
 ```python
 c.get_security_bars(market: Market, code: str, category: KlineCategory,
-                     start: int, count: int = 800) -> list[SecurityBar]
+                     start: int, count: int = 800, *, bar_time: str = "start") -> pd.DataFrame
 ```
 
 获取个股 K 线数据。
@@ -189,15 +189,22 @@ c.get_security_bars(market: Market, code: str, category: KlineCategory,
 | category | `KlineCategory` | K 线周期 |
 | start | `int` | 分页偏移（0 为最新） |
 | count | `int` | 请求数量（最多 800） |
+| bar_time | `str` | 时间戳语义，见下方说明 |
+
+**bar_time（分钟级周期时间戳对齐）**：通达信协议默认用 bar **开始时间**打时间戳
+（5min 线上午最后一根标 11:25、下午第一根标 13:00；午休 11:30–13:00 无 bar）。
+传 `bar_time="end"` 切换为 bar **右端点**（= 开始 + 周期时长，标 11:30/13:05），
+对齐 Tushare / 同花顺 / 聚宽约定。仅对分钟级周期（MIN_1/5/15/30/60）生效，
+日线及以上不受影响。默认 `"start"` 保持完全向后兼容。
 
 ### get_index_bars
 
 ```python
 c.get_index_bars(market: Market, code: str, category: KlineCategory,
-                  start: int, count: int = 800) -> list[SecurityBar]
+                  start: int, count: int = 800, *, bar_time: str = "start") -> pd.DataFrame
 ```
 
-获取指数 K 线数据。参数同 `get_security_bars`。
+获取指数 K 线数据。参数（含 `bar_time`）同 `get_security_bars`。
 
 **常用指数**：
 | 指数 | market | code |

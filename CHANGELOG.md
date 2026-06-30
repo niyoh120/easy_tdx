@@ -2,6 +2,18 @@
 
 本文件记录 easy-tdx 的版本变更。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [1.16.0] — 2026-06-30
+
+### 新增
+
+- **分钟级 K 线时间戳可选「开始/结束时间」**，一键对齐 Tushare / 同花顺（`_df.py`、`client.py`、`ex/client.py`、`mac/client.py`、`cli/cmd_kline.py`、`web/routers/bars.py`，[Discussion #7](https://github.com/handsomejustin/easy_tdx/discussions/7)）— 通达信协议用 bar **开始时间**打时间戳（5min 线上午最后一根标 11:25、下午第一根标 13:00；午休 11:30–13:00 无 bar），而 Tushare / 同花顺 / 聚宽用 bar **结束时间**（标 11:30 / 13:05）。新增 `bar_time` 参数让用户自由切换，避免再自行 `+5 分钟` 偏移。
+  - 全部 3 条 K 线路径覆盖：A 股 `get_security_bars` / `get_index_bars`（同步 + 异步）、扩展行情 `get_instrument_bars`（同步 + 异步）、MAC 协议 `get_stock_kline` / `get_stock_kline_with_indicators`（同步 + 异步）。
+  - CLI `kline` 新增 `--bar-time {start,end}` 选项；Web `/bars`、`/bars/index` 新增 `bar_time` 查询参数。
+  - `bar_time="start"`（**默认**）保持完全向后兼容，行为与 1.15.4 一致；`bar_time="end"` 仅对分钟级周期（1/5/15/30/60min）生效，日线及以上不受影响，自动按周期时长右移并处理跨小时 / 跨日边界。
+  - 协议解码层（`codec/datetime_.py`、`symbol_bar.py`）零改动，偏移作为纯展示语义在 client 层后处理，单一工具函数 `_apply_bar_time_align_df` / `_apply_bar_time_align_bars` 复用于全部路径。
+  - 已知限制：扩展行情 `get_history_instrument_bars_range`（按日期范围查询）不携带周期信息，传 `"end"` 时发出 warning 原样返回（建议改用 `get_instrument_bars`）。
+  - 新增 27 个单元测试（`test_codec_datetime.py` 偏移逻辑 + `test_kline_bar_time.py` 三路径覆盖），全量 700 单测通过。
+
 ## [1.15.4] — 2026-06-29
 
 ### 修复

@@ -34,6 +34,12 @@ KlineCategory 枚举所有值：
   vol       : float64    -- 成交量（股）
   amount    : float64    -- 成交额（元）
 
+bar_time 参数（仅分钟级周期）：
+  bar_time="start"（默认）-- datetime 标 bar 开始时间（通达信原始约定）。
+    例：5min 线上午最后一根标 11:25、下午第一根标 13:00；午休 11:30–13:00 无 bar。
+  bar_time="end"          -- datetime 标 bar 右端点（= 开始 + 周期时长），对齐
+    Tushare / 同花顺 / 聚宽。例：上午最后一根标 11:30、下午第一根标 13:05。
+
 使用客户端：TdxClient（同步）
 关键参数：
   market  : Market 枚举
@@ -51,6 +57,18 @@ with TdxClient.from_best_host() as c:
     df = c.get_security_bars(Market.SZ, "002176", KlineCategory.DAY, 0, 10)
     print("江特电机 日K线:")
     print(df.to_string(index=False))
+
+    # 5 分钟线：默认 bar_time="start"（通达信原始，上午最后一根标 11:25）
+    df5_start = c.get_security_bars(Market.SZ, "002176", KlineCategory.MIN_5, 0, 5)
+    print("\n江特电机 5分钟线 (bar_time=start，默认):")
+    print(df5_start.to_string(index=False))
+
+    # 5 分钟线：bar_time="end" 对齐 Tushare（上午最后一根标 11:30）
+    df5_end = c.get_security_bars(
+        Market.SZ, "002176", KlineCategory.MIN_5, 0, 5, bar_time="end"
+    )
+    print("\n江特电机 5分钟线 (bar_time=end，对齐 Tushare):")
+    print(df5_end.to_string(index=False))
 
 # 运行结果:
 # 江特电机 日K线:

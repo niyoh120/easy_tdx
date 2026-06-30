@@ -27,11 +27,14 @@ async def security_bars(
     ),
     start: int = Query(0, ge=0),
     count: int = Query(800, ge=1, le=800),
+    bar_time: str = Query(
+        "start", description="时间戳: start=bar开始时间(默认) / end=bar结束时间(对齐Tushare)"
+    ),
     client: Any = Depends(get_client),
 ) -> DataFrameResponse:
     """获取股票K线数据。"""
     df = await client.get_security_bars(
-        market_from_str(market), code, category_from_str(category), start, count
+        market_from_str(market), code, category_from_str(category), start, count, bar_time=bar_time
     )
     return _df_resp(df)
 
@@ -43,11 +46,14 @@ async def index_bars(
     category: str = Query("DAY", description="K线周期"),
     start: int = Query(0, ge=0),
     count: int = Query(800, ge=1, le=800),
+    bar_time: str = Query(
+        "start", description="时间戳: start=bar开始时间(默认) / end=bar结束时间(对齐Tushare)"
+    ),
     client: Any = Depends(get_client),
 ) -> DataFrameResponse:
     """获取指数K线数据。"""
     df = await client.get_index_bars(
-        market_from_str(market), code, category_from_str(category), start, count
+        market_from_str(market), code, category_from_str(category), start, count, bar_time=bar_time
     )
     return _df_resp(df)
 
