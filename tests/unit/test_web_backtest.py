@@ -553,7 +553,7 @@ def test_sync_backtest_with_inline_data(client, sample_ohlcv):
     assert "config" in body
     # 绩效指标存在且为原生类型
     assert "total_return" in body["performance"]
-    assert isinstance(body["performance"]["total_return"], (int, float))
+    assert isinstance(body["performance"]["total_return"], int | float)
     # 净值曲线有数据
     assert len(body["equity_curve"]) > 0
 
