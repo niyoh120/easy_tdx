@@ -2,6 +2,14 @@
 
 本文件记录 easy-tdx 的版本变更。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [1.17.8] — 2026-07-04
+
+**修复 Windows CI 矩阵 flaky 测试** —— `test_task_runner_does_not_evict_running` 用 `release.wait(timeout=5)` 钉住慢任务保持 running，但 CI 慢环境（windows 3.10）下整个测试执行超过 5s 后任务因超时自动完成、状态变 `done`，掩盖了「running 任务被 LRU 错误淘汰」的回归断言。改为 `timeout=30` 留足 CI 慢环境余量（`release.set()` 仍是确定性释放点）。**867 单测全绿**（本地连跑 5 次稳定通过），Windows 全矩阵转绿。
+
+### 修复
+
+- **flaky 时序测试超时**（`tests/unit/test_web_backtest.py::test_task_runner_does_not_evict_running`）—— `slow_task` 的 `release.wait(timeout=5)` 在 CI 慢环境下不够整个测试跑完，改为 `timeout=30`。该测试用于守护「LRU 淘汰跳过 running 任务」的并发正确性回归（审计修复），与港股逐笔成交无关，是 v1.17.2 引入的预先存在问题。
+
 ## [1.17.7] — 2026-07-04
 
 **修复 Windows CI：fixture 文件读取编码** —— 1.17.5 引入的 `tests/fixtures/ex_history_transaction.json` 含中文注释，Windows CI 默认用 cp1252 解码 UTF-8 文件触发 `UnicodeDecodeError: 'charmap' codec can't decode byte 0x8f`，导致 3 个 Windows 矩阵（3.10/3.12/3.13）的 `test_parse_ex_history_transaction_hk` 失败。统一为 fixture 读取显式指定 `encoding="utf-8"`。**867 单测全绿**，ruff format/check / mypy strict 通过，Windows + Linux 矩阵均转绿。

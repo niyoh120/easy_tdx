@@ -354,7 +354,10 @@ def test_task_runner_does_not_evict_running(monkeypatch):
 
     def slow_task() -> dict[str, object]:
         started.set()
-        release.wait(timeout=5)
+        # 无短超时：CI 慢环境（如 windows 3.10）下 5s 可能不够整个测试跑完，
+        # 任务会因超时自动完成导致状态变 done，掩盖「running 被淘汰」的回归。
+        # release.set()（测试末尾）是唯一释放点；若回归发生，断言会先失败。
+        release.wait(timeout=30)
         return {"slow": True}
 
     running_id = runner.submit(slow_task, description="slow")
