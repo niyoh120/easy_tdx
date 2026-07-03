@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // 回测主页面：左配置面板 / 右报告面板。
-// 编排：取行情 → 选策略+参数 → 回测 → 展示 K线+净值+指标+成交。
+// 编排：点击「开始回测」→ 自动取行情 → 回测 → 展示 K线+净值+指标+成交。
+// 取行情已整合进「开始回测」（不再有单独的取行情按钮）。
 
 import { nextTick, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
@@ -17,15 +18,22 @@ import { useBacktestStore } from '../stores/backtest'
 const store = useBacktestStore()
 const route = useRoute()
 
+// SymbolPicker 实例引用，用于触发取行情
+const symbolPicker = ref<InstanceType<typeof SymbolPicker> | null>(null)
+
 // 表单状态（v-model 给子组件）
 const strategy = ref('ma_cross')
 const params = ref<Record<string, number | string | boolean>>({})
-const cash = ref(100000)
+const cash = ref(1000000)
 const commission = ref(0.0003)
 const slippage = ref(0)
 const execution = ref<ExecutionMode>('next_open')
 
-const EXECUTIONS: ExecutionMode[] = ['next_open', 'next_close', 'this_close', 'worst', 'best']
+// 成交价模式（精简为 开盘价/收盘价）
+const EXECUTIONS: { value: ExecutionMode; label: string }[] = [
+  { value: 'next_open', label: '开盘价' },
+  { value: 'next_close', label: '收盘价' },
+]
 
 onMounted(async () => {
   await store.loadStrategies().catch((e) => {
@@ -50,7 +58,13 @@ onMounted(async () => {
   }
 })
 
+// 取行情 + 回测 串联（点击「开始回测」触发）
 async function onRun() {
+  store.error = ''
+  // 1. 先取行情（SymbolPicker.loadBars 会校验并填充 store.ohlcv）
+  const ok = await symbolPicker.value?.loadBars()
+  if (!ok) return // 校验/取数失败，错误已在 store.error
+  // 2. 再回测
   await store.run({
     strategy: strategy.value,
     params: params.value,
@@ -68,7 +82,7 @@ async function onRun() {
     <aside class="config-panel">
       <section class="panel-section">
         <h3>行情数据</h3>
-        <SymbolPicker />
+        <SymbolPicker ref="symbolPicker" />
       </section>
 
       <section class="panel-section">
@@ -99,21 +113,20 @@ async function onRun() {
           </div>
         </div>
         <div class="field">
-          <label>成交模式</label>
+          <label>成交价</label>
           <select v-model="execution">
-            <option v-for="e in EXECUTIONS" :key="e" :value="e">{{ e }}</option>
+            <option v-for="e in EXECUTIONS" :key="e.value" :value="e.value">{{ e.label }}</option>
           </select>
         </div>
       </section>
 
       <button
         class="primary run-btn"
-        :disabled="store.running || !store.hasBars"
+        :disabled="store.running"
         @click="onRun"
       >
-        {{ store.running ? '回测中…' : '开始回测' }}
+        {{ store.running ? '取行情+回测中…' : '开始回测' }}
       </button>
-      <p v-if="!store.hasBars" class="hint">请先取行情数据</p>
     </aside>
 
     <!-- 右栏：报告 -->
@@ -121,7 +134,7 @@ async function onRun() {
       <div v-if="store.error" class="error-banner">⚠ {{ store.error }}</div>
 
       <div v-if="!store.result && !store.running && !store.error" class="placeholder">
-        <p>选择标的、取行情、配置策略后点击「开始回测」</p>
+        <p>输入代码、配置策略后点击「开始回测」（自动取行情）</p>
       </div>
 
       <div v-if="store.result" class="report-content">
@@ -189,12 +202,6 @@ async function onRun() {
   width: 100%;
   padding: 10px;
   font-size: 14px;
-}
-.hint {
-  color: var(--text-dim);
-  font-size: 11px;
-  text-align: center;
-  margin-top: 6px;
 }
 
 /* 右栏报告面板 */

@@ -16,11 +16,15 @@ const store = useBacktestStore()
 const stocks = ref<string[]>(['SZ:000001', 'SH:600519'])
 const strategy = ref('ma_cross')
 const params = ref<Record<string, number | string | boolean>>({})
-const cash = ref(200000)
+const cash = ref(1000000)
 const category = ref<Category>('DAY')
 const execution = ref<ExecutionMode>('next_open')
 
-const EXECUTIONS: ExecutionMode[] = ['next_open', 'next_close', 'this_close', 'worst', 'best']
+// 成交价模式（精简为 开盘价/收盘价）
+const EXECUTIONS: { value: ExecutionMode; label: string }[] = [
+  { value: 'next_open', label: '开盘价' },
+  { value: 'next_close', label: '收盘价' },
+]
 const CATEGORIES: Category[] = ['DAY', 'WEEK', 'MONTH', 'MIN_5', 'MIN_15', 'MIN_30', 'MIN_60']
 
 // 日期默认（复用单标的逻辑）
@@ -98,9 +102,9 @@ async function onRun() {
           <input v-model.number="cash" type="number" min="1000" step="10000" />
         </div>
         <div class="field">
-          <label>成交模式</label>
+          <label>成交价</label>
           <select v-model="execution">
-            <option v-for="e in EXECUTIONS" :key="e" :value="e">{{ e }}</option>
+            <option v-for="e in EXECUTIONS" :key="e.value" :value="e.value">{{ e.label }}</option>
           </select>
         </div>
       </section>

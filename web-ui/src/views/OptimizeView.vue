@@ -1,5 +1,6 @@
 <script setup lang="ts">
-// 参数网格寻优主页面：左配置（选标的 + 策略 + 寻优参数）/ 右报告（排名表 + 热力图）。
+// 参数寻优主页面：左配置（选标的 + 策略 + 寻优参数）/ 右报告（排名表 + 热力图）。
+// 取行情已整合进「开始寻优」。另有「一键寻优所有策略」：用各策略预设网格逐策略寻优再全局排名。
 
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
@@ -14,11 +15,18 @@ import { useBacktestStore } from '../stores/backtest'
 const store = useBacktestStore()
 const router = useRouter()
 
+// SymbolPicker 实例引用，用于触发取行情
+const symbolPicker = ref<InstanceType<typeof SymbolPicker> | null>(null)
+
 const strategy = ref('ma_cross')
 const paramGrid = ref<Record<string, Array<number | string>>>({})
-const cash = ref(100000)
+const cash = ref(1000000)
 const execution = ref<ExecutionMode>('next_open')
-const EXECUTIONS: ExecutionMode[] = ['next_open', 'next_close', 'this_close', 'worst', 'best']
+// 成交价模式（精简为 开盘价/收盘价）
+const EXECUTIONS: { value: ExecutionMode; label: string }[] = [
+  { value: 'next_open', label: '开盘价' },
+  { value: 'next_close', label: '收盘价' },
+]
 
 const selectedStrategy = computed(
   () => store.strategies.find((s) => s.name === strategy.value) ?? null,
@@ -36,11 +44,13 @@ const gridPoints = computed(() => {
   return sizes.reduce((a, b) => a * b, 1)
 })
 
+// 取行情（点击「开始寻优」时触发）→ 寻优
 async function onRun() {
-  if (!store.hasBars) {
-    store.error = '请先取行情数据'
-    return
-  }
+  store.error = ''
+  // 1. 先取行情
+  const ok = await symbolPicker.value?.loadBars()
+  if (!ok) return
+  // 2. 校验寻优参数
   if (Object.keys(paramGrid.value).length === 0) {
     store.error = '请勾选至少 1 个参数并填入取值'
     return
@@ -49,9 +59,24 @@ async function onRun() {
     store.error = `网格点数 ${gridPoints.value} 超过上限 200`
     return
   }
+  // 3. 寻优
   await store.runOptimize({
     strategy: strategy.value,
     param_grid: paramGrid.value,
+    cash: cash.value,
+    execution: execution.value,
+    ohlcv: store.ohlcv,
+  })
+}
+
+// 一键寻优所有策略：取行情 → 全策略预设网格寻优 → 全局排名
+async function onRunAll() {
+  store.error = ''
+  // 1. 先取行情
+  const ok = await symbolPicker.value?.loadBars()
+  if (!ok) return
+  // 2. 一键寻优
+  await store.runOptimizeAll({
     cash: cash.value,
     execution: execution.value,
     ohlcv: store.ohlcv,
@@ -66,6 +91,21 @@ function onViewParams(params: Record<string, number | string>) {
     query: { strategy: strategy.value, params: JSON.stringify(params) },
   })
 }
+
+// 一键寻优结果点击「查看」→ 跳转单标的页用该策略 + 参数回测
+function onViewAll(strategyName: string, params: Record<string, number | string>) {
+  router.push({
+    path: '/',
+    query: { strategy: strategyName, params: JSON.stringify(params) },
+  })
+}
+
+function pct(v: number | null | undefined): string {
+  return v !== null && v !== undefined && Number.isFinite(v) ? `${(v * 100).toFixed(2)}%` : '-'
+}
+function num(v: number | null | undefined, d = 2): string {
+  return v !== null && v !== undefined && Number.isFinite(v) ? v.toFixed(d) : '-'
+}
 </script>
 
 <template>
@@ -73,7 +113,7 @@ function onViewParams(params: Record<string, number | string>) {
     <aside class="config-panel">
       <section class="panel-section">
         <h3>行情数据</h3>
-        <SymbolPicker />
+        <SymbolPicker ref="symbolPicker" />
       </section>
 
       <section class="panel-section">
@@ -99,19 +139,26 @@ function onViewParams(params: Record<string, number | string>) {
           <input v-model.number="cash" type="number" min="1000" step="10000" />
         </div>
         <div class="field">
-          <label>成交模式</label>
+          <label>成交价</label>
           <select v-model="execution">
-            <option v-for="e in EXECUTIONS" :key="e" :value="e">{{ e }}</option>
+            <option v-for="e in EXECUTIONS" :key="e.value" :value="e.value">{{ e.label }}</option>
           </select>
         </div>
       </section>
 
       <button
         class="primary run-btn"
-        :disabled="store.optimizeRunning || !store.hasBars"
+        :disabled="store.optimizeRunning || store.optimizeAllRunning"
         @click="onRun"
       >
-        {{ store.optimizeRunning ? '寻优中…' : '开始寻优' }}
+        {{ store.optimizeRunning ? '取行情+寻优中…' : '开始寻优' }}
+      </button>
+      <button
+        class="run-btn"
+        :disabled="store.optimizeRunning || store.optimizeAllRunning"
+        @click="onRunAll"
+      >
+        {{ store.optimizeAllRunning ? '一键寻优所有策略中…' : '一键寻优所有策略' }}
       </button>
     </aside>
 
@@ -119,12 +166,13 @@ function onViewParams(params: Record<string, number | string>) {
       <div v-if="store.error" class="error-banner">⚠ {{ store.error }}</div>
 
       <div
-        v-if="!store.optimizeResult && !store.optimizeRunning && !store.error"
+        v-if="!store.optimizeResult && !store.optimizeAllResult && !store.optimizeRunning && !store.optimizeAllRunning && !store.error"
         class="placeholder"
       >
-        <p>选标的 → 取行情 → 选策略 → 勾选寻优参数 → 开始寻优</p>
+        <p>选标的 → 选策略 → 勾选寻优参数 → 开始寻优；或点「一键寻优所有策略」</p>
       </div>
 
+      <!-- 单策略寻优结果 -->
       <div v-if="store.optimizeResult" class="report-content">
         <section class="report-section">
           <h3>最优结果</h3>
@@ -152,6 +200,71 @@ function onViewParams(params: Record<string, number | string>) {
             :best-index="0"
             @select="onViewParams"
           />
+        </section>
+      </div>
+
+      <!-- 一键寻优所有策略结果 -->
+      <div v-if="store.optimizeAllResult" class="report-content">
+        <section class="report-section">
+          <h3>全局最佳</h3>
+          <div v-if="store.optimizeAllResult.best" class="best-summary">
+            <span class="best-params">
+              {{ store.optimizeAllResult.best.strategy_label }}
+              {{ JSON.stringify(store.optimizeAllResult.best.params) }}
+            </span>
+            <span class="best-return pos">
+              {{ (store.optimizeAllResult.best.total_return! * 100).toFixed(2) }}%
+            </span>
+            <span class="best-meta">
+              夏普 {{ store.optimizeAllResult.best.sharpe?.toFixed(2) }} · 回撤
+              {{ (store.optimizeAllResult.best.max_drawdown! * 100).toFixed(2) }}% · 胜率
+              {{ (store.optimizeAllResult.best.win_rate! * 100).toFixed(1) }}%
+            </span>
+          </div>
+          <p class="meta-line">
+            共 {{ store.optimizeAllResult.ranking.length }} 个策略有效 ·
+            合计 {{ store.optimizeAllResult.total_grid_points }} 网格点
+          </p>
+        </section>
+
+        <section class="report-section">
+          <h3>策略排名（按总收益降序）</h3>
+          <table class="opt-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>策略</th>
+                <th>参数</th>
+                <th class="num">总收益</th>
+                <th class="num">夏普</th>
+                <th class="num">最大回撤</th>
+                <th class="num">交易数</th>
+                <th class="num">胜率</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="(r, i) in store.optimizeAllResult.ranking"
+                :key="r.strategy"
+                :class="{ best: i === 0 }"
+              >
+                <td class="rank">{{ i + 1 }}</td>
+                <td>{{ r.strategy_label }}</td>
+                <td class="params">{{ JSON.stringify(r.params) }}</td>
+                <td class="num" :class="r.total_return !== null && r.total_return > 0 ? 'pos' : 'neg'">
+                  {{ pct(r.total_return) }}
+                </td>
+                <td class="num">{{ num(r.sharpe) }}</td>
+                <td class="num neg">{{ pct(r.max_drawdown) }}</td>
+                <td class="num">{{ r.total_trades }}</td>
+                <td class="num">{{ pct(r.win_rate) }}</td>
+                <td>
+                  <button class="view-btn" @click="onViewAll(r.strategy, r.params)">查看</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </section>
       </div>
     </main>
@@ -188,6 +301,10 @@ function onViewParams(params: Record<string, number | string>) {
   width: 100%;
   padding: 10px;
   font-size: 14px;
+  margin-top: 8px;
+}
+.run-btn:first-of-type {
+  margin-top: 0;
 }
 .report-panel {
   flex: 1;
@@ -227,6 +344,7 @@ function onViewParams(params: Record<string, number | string>) {
   display: flex;
   align-items: baseline;
   gap: 16px;
+  flex-wrap: wrap;
 }
 .best-params {
   font-family: var(--font-mono);
@@ -242,7 +360,57 @@ function onViewParams(params: Record<string, number | string>) {
   color: var(--text-dim);
   font-size: 12px;
 }
+.meta-line {
+  color: var(--text-dim);
+  font-size: 12px;
+  margin-top: 8px;
+}
 .pos {
   color: var(--up);
+}
+.neg {
+  color: var(--down);
+}
+.opt-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.opt-table th,
+.opt-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+.opt-table th {
+  color: var(--text-dim);
+  font-size: 12px;
+  position: sticky;
+  top: 0;
+  background: var(--bg-panel);
+}
+.num {
+  text-align: right;
+  font-family: var(--font-mono);
+}
+.params {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.rank {
+  color: var(--text-dim);
+  width: 32px;
+}
+.best {
+  background: rgba(74, 158, 255, 0.08);
+}
+.best .rank {
+  color: var(--accent);
+  font-weight: 700;
+}
+.view-btn {
+  font-size: 11px;
+  padding: 2px 8px;
 }
 </style>

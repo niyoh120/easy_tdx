@@ -7,6 +7,7 @@ import type {
   BacktestResult,
   Bar,
   Category,
+  OptimizeAllBacktestRequest,
   OptimizeBacktestRequest,
   PortfolioBacktestRequest,
   TaskListResponse,
@@ -152,6 +153,19 @@ export async function submitOptimizeTask(
   req: OptimizeBacktestRequest,
 ): Promise<TaskSubmitResponse> {
   const resp = await fetch(`${BASE}/backtest/optimize/run/async`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  })
+  if (!resp.ok) await throwError(resp)
+  return (await resp.json()) as TaskSubmitResponse
+}
+
+/** 提交「一键寻优所有策略」后台任务，返回 task_id。 */
+export async function submitOptimizeAllTask(
+  req: OptimizeAllBacktestRequest,
+): Promise<TaskSubmitResponse> {
+  const resp = await fetch(`${BASE}/backtest/optimize-all/run/async`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),

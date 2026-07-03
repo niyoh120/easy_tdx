@@ -22,6 +22,7 @@ export interface StrategySchema {
   label: string
   description: string
   params: ParamSchema[]
+  preset_grid?: Record<string, Array<number | string>>
 }
 
 export interface StrategiesResponse {
@@ -48,7 +49,7 @@ export interface DataFrameResponse {
 
 // ── 回测请求（POST /api/v1/backtest/run） ─────────────────────────────────────
 
-export type ExecutionMode = 'next_open' | 'next_close' | 'this_close' | 'worst' | 'best'
+export type ExecutionMode = 'next_open' | 'next_close'
 export type Category = 'DAY' | 'WEEK' | 'MONTH' | 'MIN_5' | 'MIN_15' | 'MIN_30' | 'MIN_60'
 
 export interface BacktestRequest {
@@ -130,7 +131,7 @@ export type TaskStatus = 'pending' | 'running' | 'done' | 'failed'
 export interface TaskState {
   task_id: string
   status: TaskStatus
-  result: BacktestResult | PortfolioResult | OptimizeResult | null
+  result: BacktestResult | PortfolioResult | OptimizeResult | OptimizeAllResult | null
   error: string | null
   description: string
   elapsed: number
@@ -219,6 +220,41 @@ export interface OptimizeResult {
   results: GridPointResult[]
   best: GridPointResult | null
   heatmap: OptimizeHeatmap | null
+}
+
+// ── 一键寻优所有策略（Phase 6） ──────────────────────────────────────────────
+
+export interface OptimizeAllBacktestRequest {
+  cash?: number
+  commission?: number
+  slippage?: number
+  execution?: ExecutionMode
+  ohlcv?: Bar[]
+  symbol?: string
+  category?: Category
+  count?: number
+  start_date?: string
+  end_date?: string
+}
+
+export interface OptimizeAllRankEntry {
+  strategy: string
+  strategy_label: string
+  params: Record<string, number | string>
+  total_return: number | null
+  sharpe: number | null
+  max_drawdown: number | null
+  total_trades: number
+  win_rate: number | null
+  profit_factor: number | null
+  grid_points: number
+}
+
+export interface OptimizeAllResult {
+  ranking: OptimizeAllRankEntry[]
+  best: OptimizeAllRankEntry | null
+  per_strategy: Record<string, OptimizeAllRankEntry>
+  total_grid_points: number
 }
 
 // ── 错误响应（后端 ApiErrorResponse） ─────────────────────────────────────────

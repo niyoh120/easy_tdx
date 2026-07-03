@@ -9,6 +9,7 @@ import {
   formatError,
   runBacktest,
   submitPortfolioTask,
+  submitOptimizeAllTask,
   submitOptimizeTask,
   fetchTask,
 } from '../api'
@@ -18,6 +19,8 @@ import type {
   Bar,
   PortfolioBacktestRequest,
   PortfolioResult,
+  OptimizeAllBacktestRequest,
+  OptimizeAllResult,
   OptimizeBacktestRequest,
   OptimizeResult,
   StrategySchema,
@@ -147,6 +150,40 @@ export const useBacktestStore = defineStore('backtest', () => {
     }
   }
 
+  // ── 一键寻优所有策略（Phase 6） ─────────────────────────────────────────
+  const optimizeAllResult = ref<OptimizeAllResult | null>(null)
+  const optimizeAllRunning = ref(false)
+
+  /** 提交「一键寻优所有策略」后台任务并轮询直到完成。 */
+  async function runOptimizeAll(req: OptimizeAllBacktestRequest) {
+    optimizeAllRunning.value = true
+    error.value = ''
+    optimizeAllResult.value = null
+    try {
+      const { task_id } = await submitOptimizeAllTask(req)
+      const start = Date.now()
+      // 一键寻优全策略网格点更多，放宽超时到 300s
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const state = await fetchTask(task_id)
+        if (state.status === 'done' && state.result) {
+          optimizeAllResult.value = state.result as OptimizeAllResult
+          break
+        }
+        if (state.status === 'failed') {
+          throw new Error(state.error || '一键寻优失败')
+        }
+        if (Date.now() - start > 300_000) throw new Error('一键寻优超时（300s）')
+        await new Promise((r) => setTimeout(r, 500))
+      }
+    } catch (e) {
+      error.value = formatError(e)
+      optimizeAllResult.value = null
+    } finally {
+      optimizeAllRunning.value = false
+    }
+  }
+
   return {
     // state
     strategies,
@@ -160,6 +197,8 @@ export const useBacktestStore = defineStore('backtest', () => {
     portfolioRunning,
     optimizeResult,
     optimizeRunning,
+    optimizeAllResult,
+    optimizeAllRunning,
     // getters
     hasBars,
     // actions
@@ -170,5 +209,6 @@ export const useBacktestStore = defineStore('backtest', () => {
     runPortfolio,
     clearPortfolio,
     runOptimize,
+    runOptimizeAll,
   }
 })

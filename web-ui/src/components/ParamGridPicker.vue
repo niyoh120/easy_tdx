@@ -50,12 +50,28 @@ function onInput(name: string, val: string) {
   syncOutputs()
 }
 
-// 切换策略时清空选择
+// 把预设取值列表格式化为输入框文本（逗号分隔）
+function presetToText(vals: Array<number | string>): string {
+  return vals.join(', ')
+}
+
+// 切换策略时：若有预设网格则自动勾选并填入预设取值，否则清空选择
 watch(
   () => props.strategy?.name,
   () => {
-    selected.value = new Set()
-    inputs.value = {}
+    const preset = props.strategy?.preset_grid
+    if (preset && Object.keys(preset).length > 0) {
+      const names = Object.keys(preset)
+      selected.value = new Set(names)
+      const newInputs: Record<string, string> = {}
+      for (const n of names) {
+        newInputs[n] = presetToText(preset[n])
+      }
+      inputs.value = newInputs
+    } else {
+      selected.value = new Set()
+      inputs.value = {}
+    }
     syncOutputs()
   },
 )
@@ -71,7 +87,10 @@ const gridPoints = computed(() => {
 
 <template>
   <div class="grid-picker">
-    <p class="hint">勾选 1-2 个参数寻优，填入取值列表（逗号分隔）：</p>
+    <p class="hint">
+      勾选 1-2 个参数寻优，填入取值列表（逗号分隔）。
+      切换策略会自动填入预设参数，可直接编辑：
+    </p>
     <div v-for="p in strategy?.params" :key="p.name" class="param-row">
       <label class="check">
         <input

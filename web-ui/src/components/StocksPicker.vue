@@ -1,19 +1,24 @@
 <script setup lang="ts">
-// 多标的输入（组合回测用）。逐个添加 市场:代码，可删除。
+// 多标的输入（组合回测用）。逐个添加 6 位代码，市场自动识别。
+// 删除手动市场选择（沪市/深市/北交所），由 detectMarket 智能匹配。
 
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
+
+import { detectMarket, marketLabel } from '../market'
 
 const props = defineProps<{
   modelValue: string[]
 }>()
 const emit = defineEmits<{ 'update:modelValue': [value: string[]] }>()
 
-const market = ref('SZ')
 const code = ref('')
+const detectedMarket = computed(() => (code.value && /^\d{6}$/.test(code.value)
+  ? marketLabel(detectMarket(code.value))
+  : ''))
 
 function add() {
   if (!/^\d{6}$/.test(code.value)) return
-  const sym = `${market.value}:${code.value}`
+  const sym = `${detectMarket(code.value)}:${code.value}`
   if (!props.modelValue.includes(sym)) {
     emit('update:modelValue', [...props.modelValue, sym])
   }
@@ -27,20 +32,16 @@ function remove(sym: string) {
 
 <template>
   <div class="stocks-picker">
-    <div class="row">
-      <select v-model="market">
-        <option value="SZ">深市</option>
-        <option value="SH">沪市</option>
-        <option value="BJ">北交所</option>
-      </select>
+    <div class="row add-row">
       <input
         v-model="code"
         maxlength="6"
-        placeholder="6位代码"
+        placeholder="6位代码（市场自动识别）"
         @keyup.enter="add"
       />
       <button @click="add">添加</button>
     </div>
+    <p v-if="detectedMarket" class="market-hint">将识别为：{{ detectedMarket }}</p>
 
     <div v-if="modelValue.length" class="stock-list">
       <span v-for="s in modelValue" :key="s" class="stock-tag">
@@ -53,15 +54,17 @@ function remove(sym: string) {
 </template>
 
 <style scoped>
-.row {
+.add-row {
   display: flex;
   gap: 6px;
 }
-.row select {
-  width: auto;
-}
-.row input {
+.add-row input {
   flex: 1;
+}
+.market-hint {
+  color: var(--text-dim);
+  font-size: 11px;
+  margin-top: 4px;
 }
 .stock-list {
   display: flex;
