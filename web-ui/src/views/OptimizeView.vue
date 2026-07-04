@@ -9,6 +9,7 @@ import GradeBadge from '../components/GradeBadge.vue'
 import OptimizeHeatmap from '../components/OptimizeHeatmap.vue'
 import OptimizeResultTable from '../components/OptimizeResultTable.vue'
 import ParamGridPicker from '../components/ParamGridPicker.vue'
+import QuoteCarousel from '../components/QuoteCarousel.vue'
 import SymbolPicker from '../components/SymbolPicker.vue'
 import { gradeGridPoint } from '../grading'
 import type { GradeResult } from '../grading'
@@ -196,7 +197,7 @@ const rankingGrades = computed<GradeResult[]>(() =>
         {{ store.optimizeRunning ? '取行情+寻优中…' : '开始寻优' }}
       </button>
       <button
-        class="run-btn"
+        class="run-all-btn run-btn"
         :disabled="store.optimizeRunning || store.optimizeAllRunning"
         @click="onRunAll"
       >
@@ -213,6 +214,9 @@ const rankingGrades = computed<GradeResult[]>(() =>
       >
         <p>选标的 → 选策略 → 勾选寻优参数 → 开始寻优；或点「一键寻优所有策略」</p>
       </div>
+
+      <!-- 一键寻优进行中：投资大师名言轮播，让等待不枯燥 -->
+      <QuoteCarousel v-if="store.optimizeAllRunning" :interval="3000" />
 
       <!-- 单策略寻优结果 -->
       <div v-if="store.optimizeResult" class="report-content">
@@ -358,6 +362,35 @@ const rankingGrades = computed<GradeResult[]>(() =>
 }
 .run-btn:first-of-type {
   margin-top: 0;
+}
+
+/* 「一键寻优所有策略」按钮：暖橙渐变，比 primary 蓝更醒目 */
+.run-all-btn {
+  background: linear-gradient(135deg, #f59e0b 0%, #ea580c 100%);
+  border: 1px solid #f59e0b;
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.35);
+}
+.run-all-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  border-color: #fbbf24;
+  box-shadow: 0 6px 18px rgba(245, 158, 11, 0.5);
+  transform: translateY(-1px);
+}
+.run-all-btn:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.35);
+}
+/* 运行中：暗橙 disabled，但仍是橙，区别于普通按钮的纯灰 */
+.run-all-btn:disabled {
+  background: linear-gradient(135deg, #b45309, #9a3412);
+  border-color: #b45309;
+  color: #fde68a;
+  opacity: 0.9;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
 }
 .report-panel {
   flex: 1;
