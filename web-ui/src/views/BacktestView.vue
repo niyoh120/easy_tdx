@@ -31,7 +31,7 @@ function isoDaysFromNow(days: number): string {
   d.setDate(d.getDate() + days)
   return d.toISOString().slice(0, 10)
 }
-const startDate = ref(isoDaysFromNow(-365 * 3))
+const startDate = ref('2020-01-06')
 const endDate = ref(isoDaysFromNow(0))
 
 // 表单状态（v-model 给子组件）

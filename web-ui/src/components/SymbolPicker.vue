@@ -2,7 +2,7 @@
 // 选标的 + 配置日期范围（取行情由父组件在「开始回测/开始寻优」时触发）。
 // 市场按 6 位代码智能识别，不再手动选择。
 // 后端 /bars 仅支持 count（上限 800，约 3.2 年），固定拉满后前端按日期过滤。
-// 默认：结束日=今天（最近交易日），开始日=3年前。
+// 默认：结束日=今天（最近交易日），开始日=2020-01-06。
 
 import { computed, ref } from 'vue'
 
@@ -24,7 +24,7 @@ const store = useBacktestStore()
 const code = defineModel<string>('code', { default: '000001' })
 const category = defineModel<Category>('category', { default: 'DAY' })
 const startDate = defineModel<string>('startDate', {
-  default: new Date(Date.now() - 365 * 3 * 86400_000).toISOString().slice(0, 10),
+  default: '2020-01-06',
 })
 const endDate = defineModel<string>('endDate', {
   default: new Date().toISOString().slice(0, 10),
