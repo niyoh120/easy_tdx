@@ -7,6 +7,7 @@ import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import EquityChart from '../components/EquityChart.vue'
+import GradeDetails from '../components/GradeDetails.vue'
 import MetricTable from '../components/MetricTable.vue'
 import PortfolioCompareChart from '../components/PortfolioCompareChart.vue'
 import PortfolioSummaryTable from '../components/PortfolioSummaryTable.vue'
@@ -16,6 +17,8 @@ import {
   formatError,
   saveStrategy,
 } from '../api'
+import { gradePortfolio } from '../grading'
+import { detectMarket } from '../market'
 import type { MultiStrategyItem, Performance, SavedStrategy } from '../types'
 import { useBacktestStore } from '../stores/backtest'
 
@@ -78,6 +81,17 @@ function clearSelection() {
   selectedIds.value = new Set()
 }
 
+/** 纠正历史保存策略的市场前缀。
+ *  早期 BacktestView.fullSymbol 硬编码市场判断（漏判 5 开头的沪市基金/ETF），
+ *  导致部分历史保存的策略 symbol 被错标（如 SZ:515030，应为 SH:515030），
+ *  后端按错配市场取到 0 根 K 线被静默跳过。
+ *  这里在发请求前用 detectMarket 重算前缀，纠正历史数据 + 兜底未来。 */
+function normalizeSymbol(raw: string): string {
+  if (!raw) return raw
+  const code = raw.includes(':') ? raw.split(':').pop()! : raw
+  return `${detectMarket(code)}:${code}`
+}
+
 /** 组合回测：把勾选的策略组装成 MultiStrategyItem[]，各跑原标的，资金均分。 */
 async function onComboBacktest() {
   if (selectedStrategies.value.length === 0) return
@@ -93,7 +107,7 @@ async function onComboBacktest() {
     strategy: s.strategy,
     strategy_label: s.strategy_label || s.strategy,
     params: s.params,
-    symbol: s.context.symbol as string,
+    symbol: normalizeSymbol(s.context.symbol as string),
     category: (s.context.category as MultiStrategyItem['category']) || 'DAY',
     start_date: (s.context.start_date as string) || undefined,
     end_date: (s.context.end_date as string) || undefined,
@@ -190,7 +204,11 @@ async function onLoadMulti(s: SavedStrategy) {
     `结果区会显示截至今天的策略信号（"哪些该买/该卖"）。`,
   )) return
   const today = isoToday()
-  const items = rawItems.map((it) => ({ ...it, end_date: today }))
+  const items = rawItems.map((it) => ({
+    ...it,
+    symbol: normalizeSymbol(it.symbol),
+    end_date: today,
+  }))
   const cash = typeof ctx.cash === 'number' ? ctx.cash : 1_000_000
   lastComboItems.value = items
   lastComboCash.value = cash
@@ -393,6 +411,12 @@ const comboPerf = computed<Performance | null>(() => {
     volatility: get('volatility'),
   }
 })
+
+// 组合评级：从 combined_equity 重算夏普/卡玛/回撤/波动率等 5 维度评分，
+// 与 /portfolio 页和单标的回测页同口径（复用 gradePortfolio）。
+const comboGrade = computed(() =>
+  store.multiStrategyResult ? gradePortfolio(store.multiStrategyResult) : null,
+)
 </script>
 
 <template>
@@ -628,6 +652,11 @@ const comboPerf = computed<Performance | null>(() => {
       </div>
 
       <div v-if="store.multiStrategyResult" class="combo-content">
+        <div v-if="comboGrade" class="combo-chart-block">
+          <h4>组合评级</h4>
+          <GradeDetails :result="comboGrade" expanded />
+        </div>
+
         <div class="combo-summary">
           <div class="combo-stat">
             <span class="label">组合总收益</span>

@@ -14,6 +14,7 @@ import StrategyPicker from '../components/StrategyPicker.vue'
 import SymbolPicker from '../components/SymbolPicker.vue'
 import TradeTable from '../components/TradeTable.vue'
 import { formatError, saveStrategy } from '../api'
+import { detectMarket } from '../market'
 import { gradePerformance } from '../grading'
 import type { Category, ExecutionMode } from '../types'
 import { useBacktestStore } from '../stores/backtest'
@@ -121,12 +122,10 @@ const grade = computed(() =>
 )
 
 // 当前股票完整代码（市场:6位），从 SymbolPicker 同步来的 code 是纯数字，
-// 需要带上市场前缀。复用 SymbolPicker 内部已经算好的前缀更稳妥——这里简单按
-// 交易所规则推断（6 位代码：6/9 开头 SH，其余 SZ；8/4 开头 BJ）。
+// 需要带上市场前缀。复用 market.ts 的 detectMarket（与 SymbolPicker /
+// StocksPicker 同一套规则），避免分叉导致 ETF/基金（5 开头）等被错判市场。
 function fullSymbol(code6: string): string {
-  if (/^(6|9)/.test(code6)) return `SH:${code6}`
-  if (/^(8|4)/.test(code6)) return `BJ:${code6}`
-  return `SZ:${code6}`
+  return `${detectMarket(code6)}:${code6}`
 }
 
 function openSaveForm() {
