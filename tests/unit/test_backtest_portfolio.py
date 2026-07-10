@@ -287,3 +287,75 @@ def test_empty_trades() -> None:
     assert (equity["cash"] == 100000).all()
     # 所有 bar 持仓应为 0
     assert (positions["size"] == 0).all()
+
+
+def test_apply_trades_int_datetime_vs_datetime64_df() -> None:
+    """issue #30：trade.datetime(int) 与 df datetime(datetime64) 类型不一致时，
+    交易仍应被正确应用，而非静默漏单导致净值恒定。
+
+    复现：过去 apply_trades 用 trade.datetime 作 dict key、用
+    df["datetime"].to_numpy()[i] 查找；两端类型不一致（int vs datetime64）
+    时 trade_map.get(dt) 永不命中，全部交易被丢弃 → 净值恒等于初始资金，
+    但 trades 表里仍有 PnL（_compute_pnls 不依赖 df 查找）。
+    """
+    # df 的 datetime 列为 datetime64（真实 get_stock_kline 路径）
+    df = pd.DataFrame(
+        {
+            "datetime": pd.date_range("2024-01-01", periods=10, freq="D"),
+            "close": [10, 11, 12, 11, 10, 13, 14, 13, 15, 16],
+        }
+    )
+    # trade.datetime 为 int YYYYMMDD（类型与 df 不一致）
+    buy = Trade(
+        datetime=20240101,
+        direction="BUY",
+        size=100,
+        price=10.0,
+        commission=5.0,
+        slippage=0.0,
+    )
+    sell = Trade(
+        datetime=20240106,
+        direction="SELL",
+        size=100,
+        price=13.0,
+        commission=6.0,
+        slippage=0.0,
+    )
+
+    tracker = PortfolioTracker(df, initial_cash=100000)
+    tracker.apply_trades([buy, sell])
+
+    equity = tracker.equity_curve
+    # 卖出后现金 = 100000 - 100*10 - 5 + 100*13 - 6 = 100289
+    # 修复前此处为 100000（交易被静默丢弃）
+    assert equity["cash"].iloc[-1] == 100289.0
+    # 净值不应恒等于初始资金（交易生效）
+    assert equity["total"].iloc[-1] != 100000.0
+
+
+def test_apply_trades_timestamp_vs_int_df() -> None:
+    """issue #30 反向：trade.datetime(Timestamp) 与 df datetime(int) 不一致。"""
+    df = pd.DataFrame(
+        {
+            "datetime": [
+                int(d.strftime("%Y%m%d")) for d in pd.date_range("2024-01-01", periods=10, freq="D")
+            ],
+            "close": [10, 11, 12, 11, 10, 13, 14, 13, 15, 16],
+        }
+    )
+    buy = Trade(
+        datetime=pd.Timestamp("2024-01-01"),
+        direction="BUY",
+        size=100,
+        price=10.0,
+        commission=5.0,
+        slippage=0.0,
+    )
+
+    tracker = PortfolioTracker(df, initial_cash=100000)
+    tracker.apply_trades([buy])
+
+    # 修复前交易被丢弃、持仓为 0
+    assert tracker.positions["size"].iloc[0] == 100
+

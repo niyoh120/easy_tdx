@@ -2,6 +2,20 @@
 
 本文件记录 easy-tdx 的版本变更。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [1.20.3] — 2026-07-10
+
+**修复回测绩效统计两个准确性 bug**（issues #30 / #31）—— 用户反馈升级到 1.20.2 后回测数据仍然不对：#31 调仓回测最大回撤荒谬（-92%），#30 单标的回测总收益恒为 0（但交易表有盈亏）。排查后定位为两处独立缺陷，逐一修复并补回归测试。
+
+### 修复
+
+- **RebalanceEngine 缺失价格导致净值假崩塌**（`src/easy_tdx/portfolio/rebalance.py`）—— 已持仓标的当日缺 K 线（停牌/上市晚/日历错位）时，`prices.get(code, 0)` 返回 0，该标的持仓市值被记为 0，净值单日暴跌（issue #31：159915 在 20210208 缺一天数据，持仓占 ~93%，净值从 1.1M 瞬跌至 91,845，全期最大回撤 -92%）。新增 `last_known_price` forward-fill：缺失日沿用最近已知收盘价估值（停牌标的的标准做法）。修复后真实 ETF 数据最大回撤 24.01%（用户 backtrader 基准 27%），总收益 220.56% 不变。
+- **RebalanceEngine 最大回撤符号口径**（`src/easy_tdx/portfolio/rebalance.py`）—— `_compute_performance` 此前用 `(total-peak)/peak + np.min` 返回**负**最大回撤，与 `BacktestEngine.PerformanceAnalyzer`（正值 `[0,1]`）、CLI/文档约定不一致。改为 `(peak-total)/peak + np.max` 正值口径。
+- **PortfolioTracker 交易静默漏单**（`src/easy_tdx/backtest/portfolio.py`）—— `apply_trades` 用 `trade.datetime` 作 dict key、用 `df["datetime"].to_numpy()[i]` 查找；两端类型不一致（int YYYYMMDD vs datetime64）时 `trade_map.get(dt)` 永不命中，全部交易被静默丢弃，净值恒等于初始资金（issue #30：`total_return=0, volatility=0, end_value=100000`，但 trades 表有 PnL，因 `_compute_pnls` 不依赖 df 查找）。改为按"位置索引"匹配：预构建归一化 datetime→位置映射，trade.datetime 无论 Timestamp/int/datetime64 都能正确命中，彻底消除该静默失败。
+
+### 测试
+
+- 新增 4 个回归测试：`test_apply_trades_int_datetime_vs_datetime64_df` / `test_apply_trades_timestamp_vs_int_df`（#30，int↔datetime64 类型不一致仍正确撮合）；`test_missing_price_does_not_collapse_equity` / `test_max_drawdown_sign_positive`（#31，缺数据不假崩塌 + 回撤正值）。四测试在未修复代码上**均失败**，修复后通过。全套 936 passed；mypy 改动文件零错误；ruff 全绿。
+
 ## [1.20.2] — 2026-07-09
 
 **修复 v1.20.1 引入的 CI mypy 失败** —— v1.20.1 把 `BacktestResult.performance` 类型扩大为 `dict[str, float | str]`（为塞进 `diagnostic_warning` 字符串），破坏了 6 处下游消费方（portfolio/combo/optimizer/ranker 假设 `dict[str, float]` 做算术比较），CI mypy job 转红。本次重构为更干净的设计：诊断信息走独立的 `BacktestResult.diagnostic` 字段，performance 字典恢复 `dict[str, float]` 类型契约。顺手修复 `optimizer.py` 的 3 个既有 ndarray type-arg 错误。

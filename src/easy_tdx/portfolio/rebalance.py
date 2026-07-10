@@ -73,6 +73,10 @@ class RebalanceEngine:
         states: list[PortfolioState] = []
         trades_list: list[dict[str, object]] = []
         equity_records: list[dict[str, object]] = []
+        # 已持仓标的的最近已知收盘价。当某标的当日缺 K 线（停牌/上市晚/日历
+        # 错位）时，用上一已知价估值，避免持仓市值被错误记为 0 而造成净值单日
+        # 假崩塌（issue #31：159915 在 20210208 缺一天数据 → -92% 假回撤）。
+        last_known_price: dict[str, float] = {}
 
         for dt in all_dates:
             date_int = int(dt.strftime("%Y%m%d"))
@@ -84,6 +88,13 @@ class RebalanceEngine:
                     row = df[df["datetime"] == dt]
                     if not row.empty:
                         prices[code] = float(row["close"].iloc[0])
+
+            # forward-fill：当日无数据的标的沿用最近已知价（仅对已持仓标的有影响）
+            for code in holdings:
+                if code not in prices and code in last_known_price:
+                    prices[code] = last_known_price[code]
+            # 记录本日出现的最新价，供后续缺失日沿用
+            last_known_price.update(prices)
 
             position_value = sum(holdings.get(c, 0) * prices.get(c, 0) for c in holdings)
             total_value = cash + position_value
@@ -212,8 +223,16 @@ class RebalanceEngine:
         n_days = len(total)
         annual_return = (1 + total_return) ** (252 / max(n_days, 1)) - 1
         peak = np.maximum.accumulate(total)
-        drawdown = (total - peak) / peak
-        max_drawdown = float(np.min(drawdown))
+        # 与 BacktestEngine.PerformanceAnalyzer 一致的正值口径：
+        # drawdown_pct = (peak - total) / peak ∈ [0,1]，max_drawdown 取最大值。
+        # 此前用 (total-peak)/peak + np.min 返回负值，与 CLI/文档约定不符。
+        drawdown_pct = np.divide(
+            peak - total,
+            peak,
+            out=np.zeros_like(peak),
+            where=(peak != 0),
+        )
+        max_drawdown = float(np.max(drawdown_pct))
         daily_ret = np.diff(total) / total[:-1]
         daily_ret = daily_ret[~np.isnan(daily_ret)]
         sharpe = (

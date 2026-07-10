@@ -39,6 +39,58 @@ class PortfolioTracker:
         self._position = np.zeros(self._n)
         self._avg_price = np.zeros(self._n)
         self._initial_cash = initial_cash
+        # 预构建 datetime → 位置索引 映射，供 apply_trades 按"位置"匹配交易。
+        # 关键：trade.datetime 与 df["datetime"] 的具体类型（Timestamp / int /
+        # datetime64）必须一致才能作 dict key 命中；过去直接用原始值匹配，
+        # 一旦两端类型不一致（如 datetime 列被预处理成 int、混合数据源、或
+        # pandas 版本哈希差异）就静默漏掉全部交易 → 净值恒定（issue #30）。
+        # 这里把匹配收敛到归一化后的位置索引，与类型无关。
+        self._datetime_to_pos = self._build_datetime_index(df["datetime"])
+
+    @staticmethod
+    def _build_datetime_index(dt_col: pd.Series) -> dict[object, int]:
+        """构建 datetime 值 → 位置索引 的映射。
+
+        对 datetime 列做归一化（datetime64 → int YYYYMMDD，与 OrderSimulator
+        的 _find_bar_index 同款逻辑），保证无论上游 datetime 是哪种类型，
+        查询键都能命中同一张表。
+
+        Args:
+            dt_col: DataFrame 的 datetime 列
+
+        Returns:
+            {归一化后的 datetime 值: 位置索引}，重复值取首次出现位置。
+        """
+        if pd.api.types.is_datetime64_any_dtype(dt_col):
+            keys = dt_col.dt.strftime("%Y%m%d").astype("int64").to_numpy()
+        else:
+            keys = dt_col.to_numpy()
+        mapping: dict[object, int] = {}
+        for i, k in enumerate(keys):
+            if k not in mapping:
+                mapping[k] = i
+        return mapping
+
+    def _find_pos(self, trade_dt: object) -> int | None:
+        """把 trade.datetime 归一化后查 df 中的位置索引。
+
+        与 _build_datetime_index 使用同一套归一化规则，保证类型无关命中。
+
+        Args:
+            trade_dt: 交易时间（int YYYYMMDD / Timestamp / datetime64）
+
+        Returns:
+            df 中的位置索引，未命中返回 None
+        """
+        # datetime-like（Timestamp / datetime64）→ int YYYYMMDD 再查
+        if hasattr(trade_dt, "strftime"):
+            try:
+                key: object = int(trade_dt.strftime("%Y%m%d"))
+            except (ValueError, AttributeError):
+                return None
+        else:
+            key = trade_dt
+        return self._datetime_to_pos.get(key)
 
     def apply_trades(self, trades: list[Trade]) -> None:
         """应用交易记录，更新内部状态数组。
@@ -46,17 +98,20 @@ class PortfolioTracker:
         Args:
             trades: 交易列表
         """
-        # 构建 datetime → [Trade] 映射（支持同 bar 多笔交易）
+        # 构建 位置索引 → [Trade] 映射（支持同 bar 多笔交易）。
+        # 用位置索引而非原始 datetime 值作 key，与 trade.datetime 的具体类型
+        # 无关，杜绝 int vs datetime64 类型不一致导致的静默漏单（issue #30）。
         trade_map: dict[int, list[Trade]] = {}
         for trade in trades:
             if trade.rejected:
                 continue
-            trade_map.setdefault(trade.datetime, []).append(trade)
+            pos = self._find_pos(trade.datetime)
+            if pos is None:
+                continue
+            trade_map.setdefault(pos, []).append(trade)
 
         # 遍历每个 bar
         for i in range(self._n):
-            dt = self._datetime[i]
-
             # 继承前一个 bar 的状态（除了第一个 bar）
             if i > 0:
                 self._cash[i] = self._cash[i - 1]
@@ -64,7 +119,7 @@ class PortfolioTracker:
                 self._avg_price[i] = self._avg_price[i - 1]
 
             # 处理该 bar 的所有交易
-            for trade in trade_map.get(dt, []):
+            for trade in trade_map.get(i, []):
                 if trade.direction == "BUY":
                     cost = trade.size * trade.price + trade.commission + trade.slippage
                     self._cash[i] -= cost
