@@ -5,7 +5,13 @@
 - 实时策略信号触发
 - 多标的并发监控
 
-这是 API 骨架，transport 层的协议级订阅待实现。
+.. note::
+
+    ``EventBus`` 是纯发布/订阅管道，自身不会产生数据。要驱动
+    :class:`RealtimeStrategy`，需要配合 :mod:`easy_tdx.realtime.feed` 的
+    :class:`RealtimeDataFeed`（轮询 ``get_stock_quotes`` 快照）或自行实现
+    调用 ``bus.publish`` 的数据源。通达信协议无服务端推送，本模块的「实时」
+    是轮询快照近似（默认约 3 秒延迟）。
 """
 
 from __future__ import annotations

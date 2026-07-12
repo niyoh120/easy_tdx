@@ -1112,6 +1112,10 @@ curl -X POST "http://localhost:8000/api/v1/chanlun/analyze" \
 
 ### WebSocket 实时行情
 
+> ⚠️ **当前未联动数据源**：`create_app()` 尚未创建 `EventBus`，此 WS 端点目前
+> 不会推送任何行情。计划在后续版本接入 `RealtimeDataFeed` 后打通。
+> 如需实时行情，请先用上文「实时行情轮询」的编程 API。
+
 ```javascript
 // JavaScript 示例
 const ws = new WebSocket("ws://localhost:8000/ws/realtime/SZ000001");
@@ -1614,6 +1618,65 @@ df = client.get_financial_report("600519", report_type="llb", num=4)
 > - ``item_value`` 是字符串（新浪原始格式），本实现转 float；空/非数值转 None
 > - 有同比的科目附加 ``{科目}_同比`` 列（float 比例，如 0.06336 = +6.3%）
 > - 大类标题行（如 ``流动资产``，原 ``item_value=""``）保留为 None，反映报表结构
+
+### 实时行情轮询（RealtimeDataFeed）
+
+> ⚠️ 通达信协议**没有服务端推送**，只有请求/响应。本模块的「实时」是 **轮询五档快照近似**
+> （默认约 3 秒延迟），适合盘中信号提醒、轻量监控；**不适合高频 / 逐笔撮合**。
+
+`EventBus` 自身是纯发布/订阅管道，不会产生数据。要让 `RealtimeStrategy` 跑起来，
+需要配合 `RealtimeDataFeed`：它自动完成 `get_stock_quotes → MarketEvent → bus.publish`。
+
+```python
+import asyncio
+from easy_tdx.mac.client import AsyncMacClient
+from easy_tdx.realtime import (
+    EventBus,
+    RealtimeStrategy,
+    MarketEvent,
+    RealtimeDataFeed,
+)
+
+
+class MyStrategy(RealtimeStrategy):
+    def on_tick(self, event: MarketEvent) -> None:
+        print(f"{event.market}{event.code} price={event.price} vol={event.volume}")
+
+
+async def main():
+    bus = EventBus()
+    strategy = MyStrategy()
+    bus.subscribe("SZ000001", strategy.on_tick)   # 注意：key 必须带市场前缀
+
+    feed = RealtimeDataFeed(
+        bus=bus,
+        symbols=[(0, "000001"), (1, "600519")],   # [(Market.SZ, code), ...]，单批 ≤80 只
+        interval=3.0,     # 轮询间隔（秒），下限 0.1
+        dedup=True,       # (price, volume) 未变的标的跳过发布
+        # sessions=(),    # 传空 tuple 表示全天轮询；默认仅 9:15-11:30 / 13:00-15:00
+    )
+    async with AsyncMacClient.from_best_host() as client:
+        await feed.run_async(client)   # Ctrl+C 或 feed.stop() 退出
+
+
+asyncio.run(main())
+```
+
+同步客户端（`MacClient`）用 `run_sync`，feed 会把阻塞调用丢到线程池，不卡事件循环：
+
+```python
+from easy_tdx.mac.client import MacClient
+
+with MacClient.from_best_host() as client:
+    feed.run_sync(client)
+```
+
+> **关键坑（issue #34）**：
+> - 订阅 key 必须与 `publish` 内部拼的 `f"{market}{code}"` 一致，即 `"SZ000001"`
+>   而不是 `"000001"`；否则事件分发匹配不到。
+> - 传给 `subscribe` 的必须是**实例的绑定方法** `strategy.on_tick`，
+>   不是未绑定的类方法 `MyStrategy.on_tick`。
+> - 整个流程跑在 `asyncio.run()` 里，否则协程不会被调度。
 
 ## 枚举参考
 
